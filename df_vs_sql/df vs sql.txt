@@ -1,0 +1,16 @@
+Example of equivalence between dataframe and SQL queries.
+
+```
+result_df = (loans
+    .join(banks, loans["lei"] == banks["lei_2020"])
+    .filter(banks["respondent_name"] == "University of Wisconsin Credit Union")
+    .sample(fraction=0.5, seed=3, withReplacement=True)
+    .select(count("*").alias("count")))
+
+spark.sql("""
+    SELECT COUNT(*)
+    FROM loans
+    INNER JOIN banks ON loans.lei = banks.lei_2020
+    WHERE banks.respondent_name = 'University of Wisconsin Credit Union'
+""").explain(True)
+```
