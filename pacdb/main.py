@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union, overload
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple, Union, overload
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.functions import col, regexp_replace, lower, count, concat_ws
 from pyspark.sql.types import StringType, Row
@@ -34,6 +34,8 @@ class PACDataFrame:
         else:
             # create a new sampler
             self.sampler = DataFrameSampler(self.df)
+
+        self.predicate: Callable[[DataFrame], Any] = None
 
     @classmethod
     def fromDataFrame(cls, df: DataFrame) -> "PACDataFrame":
@@ -85,6 +87,33 @@ class PACDataFrame:
             raise ValueError("No sampler attached to this dataframe")
         return self.sampler.sampleByColumns(cols)
 
+    def _n(self) -> int:
+        """
+        Return the exact number of rows in the underlying dataframe, for use in PAC algorithm. This is 
+        privacy-sensitive and should not be used to release information about the underlying dataframe!
+        """
+        return self.df.count()
+    
+    def withPredicate(self, predicate: Callable[[DataFrame], Any]) -> "PACDataFrame":
+        """
+        Set the predicate function to be made private.
+        """
+        self.predicate = predicate
+        return self
+    
+    def _applyPredicate(self, df: DataFrame) -> Any:
+        """
+        Directly apply the predicate to the given dataframe and return the exact output. This is not private at all!
+        """
+        if self.predicate is None:
+            return df
+        return self.predicate(df)
+    
+    # def count(self, *args, **kwargs):
+    #     s = self.sample()
+    #     correction_factor = 1. / self.sampler.options.fraction
+    #     return s.count() * correction_factor
+    
     # def __getattr__(self, name):
     #     """
     #     Proxy all unmatched attribute calls to the underlying DataFrame
