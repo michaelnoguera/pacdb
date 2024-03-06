@@ -59,9 +59,13 @@ class Sampler(ABC):
     You can provide your own sampler by implementing this interface
     """
 
+    @overload
     def __init__(self, df: Optional[DataFrame] = None):
+        ...
+
+    def __init__(self, df: Optional[DataFrame] = None, options: SamplerOptions = SamplerOptions()):
         self.df = df
-        self.options: SamplerOptions | None = SamplerOptions()  # defaults to 50% w/o replacement
+        self.options = options  # defaults to 50% w/o replacement
         pass
 
     def withOptions(self, options: SamplerOptions) -> "Sampler":
