@@ -8,11 +8,20 @@ from typeguard import typechecked
 from functools import wraps
 from abc import ABC, abstractmethod
 
+# Question: What is the case in which key_column_name will be sent as a parameter to the method? 
 def with_composite_key_column(df: DataFrame, columns: List[str], key_column_name: Optional[str] = None) -> Tuple[DataFrame, str]:
     """
     Add a column to the dataframe that is a concatenation of the values in the specified columns
     Used for sampling proportionately
+    Args:
+        df (DataFrame): The dataset
+        columns_to_sample_by (List[str]): Columns from the dataset df that are to be sampled
+        key_column_name (str): Composite key
+
+    Returns:
+        Tuple: Dataframe with a new concatenated column and the column name
     """
+     
     if key_column_name is None:
         key_column_name = "_".join(columns)
 
@@ -28,8 +37,19 @@ def sample_proportionately(df: DataFrame,
                         columns_to_sample_by: List[str],
                         fraction: float,
                         **kwargs) -> DataFrame:
+    """
+    Method to sample the data using specific columns
+    Args:
+        df (DataFrame): The dataset
+        columns_to_sample_by (List[str]): Columns from the dataset df that are to be sampled
+        fraction (float)
+
+    Returns:
+        DataFrame: sampled dataframe
+    """
     # kwargs include seed, replacement, and other options for sampleBy
 
+    # creating a composite key in case of multiple columns
     df_keyed, key_column = with_composite_key_column(df, columns_to_sample_by) # create key column
 
     # establish the fraction of each label in the dataset
@@ -95,11 +115,24 @@ class Sampler(ABC):
 
 
 class DataFrameSampler(Sampler):
+    """Implementation of Sampler methods"""
+
     def __init__(self, df: Optional[DataFrame] = None):
         super().__init__(df)
 
     def sample(self) -> DataFrame:
+        """
+        Returns self DataFrame with default options
+        """
         return self.df.sample(withReplacement=self.options.withReplacement, fraction=self.options.fraction, seed=self.options.seed)
     
     def sampleByColumns(self, cols: List[Union[Column, str]]) -> DataFrame:
+        """
+        Returns sampled data
+        Args:
+            cols (List[Union[Column, str]]): List of columns to be sampled
+
+        Returns:
+            DataFrame: the sampled DataFrame
+        """
         return sample_proportionately(self.df, cols, self.options.fraction, seed=self.options.seed)

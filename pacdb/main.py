@@ -1,3 +1,7 @@
+'''
+Contains logic for custom PACDataFrame object
+'''
+
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple, Union, overload
 from pyspark.sql import SparkSession, DataFrame
@@ -12,6 +16,8 @@ from .sampler import Sampler, SamplerOptions, DataFrameSampler
 
 
 class PACDataFrame:
+    """A custom PACDataFrame class"""
+
     @overload
     def __init__(self, df: DataFrame):
         """
