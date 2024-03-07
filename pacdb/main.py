@@ -12,15 +12,15 @@ from .sampler import Sampler, SamplerOptions, DataFrameSampler
 
 
 class PACDataFrame:
-    @overload
-    def __init__(self, df: DataFrame):
-        """
-        Create a PACDataFrame from a PySpark DataFrame to use PAC-private functions.
-        A new PACDataFrame will have a new DataFrameSampler attached to it.
-        """
-        ...
+    """
+    Create a PACDataFrame from a PySpark DataFrame to use PAC-private functions.
+    A new PACDataFrame will have a new DataFrameSampler attached to it.
+    """
 
     def __init__(self, df: DataFrame, sampler: Optional[DataFrameSampler] = None):
+        """
+        Prefer to use `PACDataFrame.fromDataFrame(...)` instead of this constructor
+        """
         self.df = df
 
         if sampler is not None:
@@ -35,10 +35,13 @@ class PACDataFrame:
             # create a new sampler
             self.sampler = DataFrameSampler(self.df)
 
-        self.predicate: Callable[[DataFrame], Any] = None
+        self.predicate: Callable[[DataFrame], Any] | None = None  # set by withPredicate
 
     @classmethod
     def fromDataFrame(cls, df: DataFrame) -> "PACDataFrame":
+        """
+        Create a PACDataFrame from an existing Spark DataFrame.
+        """
         return cls(df)
     
     def toDataFrame(self) -> DataFrame:
@@ -71,7 +74,7 @@ class PACDataFrame:
             raise ValueError("No sampler attached to this dataframe")
         return self.sampler.sample()
     
-    def sampleByColumns(self, cols: List[Union[Column, str]]) -> DataFrame:
+    def sampleByColumns(self, cols: List[str]) -> DataFrame:
         """
         Take a single sample of the dataframe, enforcing the restriction that all categories in the specified
         columns must be evenly represented in the sample.

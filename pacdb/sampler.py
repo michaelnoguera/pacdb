@@ -12,7 +12,9 @@ def with_composite_key_column(df: DataFrame, columns: List[str], key_column_name
     """
     Add a column to the dataframe that is a concatenation of the values in the specified columns
     Used for sampling proportionately
-    """
+    """    
+    assert all(c in df.columns for c in columns), "All columns must be present in the dataframe"
+
     if key_column_name is None:
         key_column_name = "_".join(columns)
 
@@ -48,8 +50,8 @@ def sample_proportionately(df: DataFrame,
 
 @dataclass
 class SamplerOptions():
-    withReplacement: Optional[Union[float, bool]] = False
-    fraction: Optional[Union[int, float]] = 0.5
+    withReplacement: Optional[bool] = False
+    fraction: Union[int, float] = 0.5
     seed: Optional[int] = None
     columns_to_sample_by: List[str] | None = None
 
@@ -59,14 +61,10 @@ class Sampler(ABC):
     You can provide your own sampler by implementing this interface
     """
 
-    @overload
-    def __init__(self, df: Optional[DataFrame] = None):
-        ...
-
     def __init__(self, df: Optional[DataFrame] = None, options: SamplerOptions = SamplerOptions()):
         self.df = df
-        self.options = options  # defaults to 50% w/o replacement
-        pass
+        self.options: SamplerOptions = options  # defaults to 50% w/o replacement
+        ...
 
     def withOptions(self, options: SamplerOptions) -> "Sampler":
         self.options = options
@@ -83,13 +81,13 @@ class Sampler(ABC):
         return self
 
     @abstractmethod
-    def sample() -> "DataFrame":
+    def sample(self) -> "DataFrame":
         pass
     
     @abstractmethod
     def sampleByColumns(
         self, 
-        cols: List[Union[Column, str]], 
+        cols: List[str], 
     ) -> "DataFrame":
         pass
 
@@ -99,7 +97,13 @@ class DataFrameSampler(Sampler):
         super().__init__(df)
 
     def sample(self) -> DataFrame:
+        if self.df is None:
+            raise ValueError("No dataframe attached to this sampler")
         return self.df.sample(withReplacement=self.options.withReplacement, fraction=self.options.fraction, seed=self.options.seed)
     
-    def sampleByColumns(self, cols: List[Union[Column, str]]) -> DataFrame:
+    def sampleByColumns(self, cols: List[str]) -> DataFrame:
+        if self.df is None:
+            raise ValueError("No dataframe attached to this sampler")
+        elif self.options.columns_to_sample_by is None:
+            raise ValueError("No columns to sample by specified, use withOption(s) to set")
         return sample_proportionately(self.df, cols, self.options.fraction, seed=self.options.seed)
