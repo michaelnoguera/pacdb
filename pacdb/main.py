@@ -15,11 +15,26 @@ class PACDataFrame:
     """
     Create a PACDataFrame from a PySpark DataFrame to use PAC-private functions.
     A new PACDataFrame will have a new DataFrameSampler attached to it.
+
+    Example:
+    ```
+    from pacdb import PACDataFrame, Sampler, DataFrameSampler, SamplerOptions
+
+    pac_lung_df = (PACDataFrame(lung_df)
+                    .withSamplerOptions(
+                        SamplerOptions(
+                            withReplacement=False, 
+                            fraction=0.5
+                        )
+                    ))
+
+    pac_lung_df.sample().toPandas().head()
+    ```
     """
 
     def __init__(self, df: DataFrame, sampler: Optional[DataFrameSampler] = None):
         """
-        Prefer to use `PACDataFrame.fromDataFrame(...)` instead of this constructor
+        Construct a new PACDataFrame from a PySpark DataFrame. Same as `fromDataFrame` but with additional optional parameters.
         """
         self.df = df
 
@@ -90,6 +105,15 @@ class PACDataFrame:
             raise ValueError("No sampler attached to this dataframe")
         return self.sampler.sampleByColumns(cols)
 
+    @property
+    def sampling_rate(self) -> float:
+        """
+        Return the sampling rate of the attached sampler.
+        """
+        if self.sampler is None:
+            raise ValueError("No sampler attached to this dataframe")
+        return self.sampler.options.fraction
+    
     def _n(self) -> int:
         """
         Return the exact number of rows in the underlying dataframe, for use in PAC algorithm. This is 
