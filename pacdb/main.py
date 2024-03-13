@@ -50,7 +50,14 @@ class PACDataFrame:
             # create a new sampler
             self.sampler = DataFrameSampler(self.df)
 
-        self.predicate: Callable[[DataFrame], Any] | None = None  # set by withPredicate
+        self.query: Callable[[DataFrame], Any] | None = None  # set by withQuery
+
+        self.trials: int = 1000  # number of trials for PAC algorithm, will determine length of X and Y
+        
+        self.Y: Optional[List[Any]] = None  # set by _measure
+
+        self.avg_dist: Optional[float] = None  # set by _estimate_noise
+
 
     @classmethod
     def fromDataFrame(cls, df: DataFrame) -> "PACDataFrame":
@@ -81,7 +88,7 @@ class PACDataFrame:
         self.sampler = self.sampler.withOption(option, value)
         return self
     
-    def sample(self) -> DataFrame:
+    def _sample(self) -> DataFrame:
         """
         Take a single sample of the dataframe based on the attached sampler.
         """
@@ -89,7 +96,7 @@ class PACDataFrame:
             raise ValueError("No sampler attached to this dataframe")
         return self.sampler.sample()
     
-    def sampleByColumns(self, cols: List[str]) -> DataFrame:
+    def _sampleByColumns(self, cols: List[str]) -> DataFrame:
         """
         Take a single sample of the dataframe, enforcing the restriction that all categories in the specified
         columns must be evenly represented in the sample.
@@ -114,6 +121,77 @@ class PACDataFrame:
             raise ValueError("No sampler attached to this dataframe")
         return self.sampler.options.fraction
     
+    def setNumberOfTrials(self, trials: int) -> "PACDataFrame":
+        """
+        Set the number of trials to be used by the PAC algorithm. This is used to compute the privacy
+        guarantee, and should be set to a large number for accurate results.
+        """
+        self.trials = trials
+        return self
+    
+    def _subsample(self) -> "PACDataFrame":
+        """
+        Internal function.
+        Calls `sample()` `trials` times to generate X.
+        """
+        X: List[DataFrame] = [self._sample() for i in range(self.trials * 2)]
+        Y: list[int] = []
+
+        for Xi in X:
+            Yi = self.df._applyQuery(Xi)
+            # Yi = Yi * (1/self.df.sampling_rate)  # so that counts are not halved
+            Y.append(Yi)  # store result of query
+
+        self.Y = Y
+
+    def _measure_stability(self) -> "PACDataFrame":
+        """
+        Internal function.
+        Applies `self.query` to each X to generate Y. Sets the Y (and by extension Y_pairs) instance variables.
+        """
+
+        assert self.X is not None, "Must call _subsample() before _measure()"
+
+        Y: list[int] = []
+        
+        for Xi in self.X:
+            Yi = self.df._applyQuery(Xi)
+            # TODO solve correction factor here: Yi = Yi * (1/self.df.sampling_rate)
+            Y.append(Yi)
+
+        self.Y = Y
+
+    def _estimate_noise(self) -> "PACDataFrame":
+        """
+        Internal function.
+        Estimates the noise needed to privatize the query based on the minimal pertubation distance between Y entries.
+        Sets `self.avg_dist`.
+        """
+
+        assert self.Y is not None, "Must call _measure() before _estimate_noise()"
+
+        # TODO: Here we assume that Yi is one-dimensional, meaning that distance is defined as abs(Yi - Yj)
+        avg_dist = 0
+        for Y1 in self.Y:
+            min_dist = min([abs(Y1 - Y2) for Y2 in self.Y if Y1 != Y2])  # distance to closest neighbor
+            avg_dist += min_dist
+        avg_dist /= len(self.Y)
+
+        self.avg_dist = avg_dist
+
+
+    @property
+    def Y_pairs(self) -> Optional[List[Tuple[Any, Any]]]:
+        """
+        Generator function so that Y only needs to be stored once but Y_pairs is still accessible.
+        """
+        if self.Y is None:
+            return None
+        return list(zip(self.Y[::2], self.Y[1::2]))
+
+
+    
+
     def _n(self) -> int:
         """
         Return the exact number of rows in the underlying dataframe, for use in PAC algorithm. This is 
@@ -121,25 +199,34 @@ class PACDataFrame:
         """
         return self.df.count()
     
-    def withPredicate(self, predicate: Callable[[DataFrame], Any]) -> "PACDataFrame":
+    def withQuery(self, query_function: Callable[[DataFrame], Any]) -> "PACDataFrame":
         """
-        Set the predicate function to be made private.
+        Set the query function to be made private.
+
+        Example:
+        ```
+        pac_lung_df: PACDataFrame = PACDataFrame(lung_df)
+               
+        # Define your query as a function
+        def A(x: DataFrame) -> int:
+            y = (x.filter(lung_df["Smoking"] >= 3)
+                    .count())
+            return y
+
+        # Attach the query function to the PACDataFrame
+        pac_lung_df = pac_lung_df.withQuery(A)
+        ```
         """
-        self.predicate = predicate
+        self.query = query_function
         return self
     
-    def _applyPredicate(self, df: DataFrame) -> Any:
+    def _applyQuery(self, df: DataFrame) -> Any:
         """
-        Directly apply the predicate to the given dataframe and return the exact output. This is not private at all!
+        Directly apply the query to the given dataframe and return the exact output. This is not private at all!
         """
-        if self.predicate is None:
+        if self.query is None:
             return df
-        return self.predicate(df)
-    
-    # def count(self, *args, **kwargs):
-    #     s = self.sample()
-    #     correction_factor = 1. / self.sampler.options.fraction
-    #     return s.count() * correction_factor
+        return self.query(df)
     
     # def __getattr__(self, name):
     #     """
