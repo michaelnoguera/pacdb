@@ -1,15 +1,18 @@
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple, Union, overload
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.functions import col, regexp_replace, lower, count, concat_ws
 from pyspark.sql.types import StringType, Row
 from pyspark.sql.column import Column
+from tqdm import tqdm
 from typeguard import typechecked
 from functools import wraps
 from abc import ABC, abstractmethod
 
 from .sampler import Sampler, SamplerOptions, DataFrameSampler
 
+from paclib import noise_to_add, noise_to_add_parameters, GaussianDistribution
 
 class PACDataFrame:
     """
@@ -53,7 +56,9 @@ class PACDataFrame:
         self.query: Callable[[DataFrame], Any] | None = None  # set by withQuery
 
         self.trials: int = 1000  # number of trials for PAC algorithm, will determine length of X and Y
+        self.max_mi: float = 1./8  # maximum mutual information allowed for the query
         
+        self.X: Optional[List[DataFrame]] = None  # set by _subsample
         self.Y: Optional[List[Any]] = None  # set by _measure
 
         self.avg_dist: Optional[float] = None  # set by _estimate_noise
@@ -69,7 +74,10 @@ class PACDataFrame:
     def toDataFrame(self) -> DataFrame:
         # TODO: add computed noise to one sample and release only that
         return self.df
-     
+    
+
+    ### Sampler methods ###
+
     def withSamplerOptions(self, options: SamplerOptions) -> "PACDataFrame":
         """
         Set the sampling options for the attached sampler
@@ -87,6 +95,15 @@ class PACDataFrame:
             raise ValueError("No sampler attached to this dataframe")
         self.sampler = self.sampler.withOption(option, value)
         return self
+    
+    @property
+    def samplerOptions(self) -> SamplerOptions:
+        """
+        Return the options of the attached sampler.
+        """
+        if self.sampler is None:
+            raise ValueError("No sampler attached to this dataframe")
+        return self.sampler.options
     
     def _sample(self) -> DataFrame:
         """
@@ -121,6 +138,9 @@ class PACDataFrame:
             raise ValueError("No sampler attached to this dataframe")
         return self.sampler.options.fraction
     
+
+    ### PAC inputs ###
+
     def setNumberOfTrials(self, trials: int) -> "PACDataFrame":
         """
         Set the number of trials to be used by the PAC algorithm. This is used to compute the privacy
@@ -129,20 +149,27 @@ class PACDataFrame:
         self.trials = trials
         return self
     
+    def withMutualInformationBound(self, max_mi: float) -> "PACDataFrame":
+        """
+        Sets `self.max_mi`, used by `_estimate_noise`.
+        """
+        self.max_mi = max_mi
+        return self
+
+
+    ### PAC algorithm ###
+
     def _subsample(self) -> "PACDataFrame":
         """
         Internal function.
         Calls `sample()` `trials` times to generate X.
         """
-        X: List[DataFrame] = [self._sample() for i in range(self.trials * 2)]
-        Y: list[int] = []
+        X: List[DataFrame] = []
+        
+        for i in tqdm(range(self.trials * 2), desc="Subsample"):
+            X.append(self._sample())
 
-        for Xi in X:
-            Yi = self.df._applyQuery(Xi)
-            # Yi = Yi * (1/self.df.sampling_rate)  # so that counts are not halved
-            Y.append(Yi)  # store result of query
-
-        self.Y = Y
+        self.X = X
 
     def _measure_stability(self) -> "PACDataFrame":
         """
@@ -154,8 +181,8 @@ class PACDataFrame:
 
         Y: list[int] = []
         
-        for Xi in self.X:
-            Yi = self.df._applyQuery(Xi)
+        for Xi in tqdm(self.X, desc="Measure Stability"):
+            Yi = self._applyQuery(Xi)
             # TODO solve correction factor here: Yi = Yi * (1/self.df.sampling_rate)
             Y.append(Yi)
 
@@ -169,16 +196,31 @@ class PACDataFrame:
         """
 
         assert self.Y is not None, "Must call _measure() before _estimate_noise()"
+        assert self.max_mi is not None, "Must set withMutualInformationBound() before _estimate_noise()"
 
-        # TODO: Here we assume that Yi is one-dimensional, meaning that distance is defined as abs(Yi - Yj)
         avg_dist = 0
-        for Y1 in self.Y:
-            min_dist = min([abs(Y1 - Y2) for Y2 in self.Y if Y1 != Y2])  # distance to closest neighbor
-            avg_dist += min_dist
-        avg_dist /= len(self.Y)
+        distance_calculator = "all-pairs"
+
+        if distance_calculator == "within-pairs":
+            # Seems most consistent with Algorithm 2?
+            for Y1, Y2 in self.Y_pairs:  # iterator is k
+                # \psi^{(k)}=d_\pi( y^{(k,1)}, y^{(k,2)})
+                # the minimal pertubation distance between scalars is the same as 1D vectors?
+                avg_dist += abs(Y1 - Y2)
+            avg_dist /= len(self.Y_pairs) # \bar\psi=\frac{\sum_{k=1}^{m} \psi_{\tau}^{(k)}}{m}
+        elif distance_calculator == "all-pairs":
+            # TODO: Here we assume that Yi is one-dimensional, meaning that distance is defined as abs(Yi - Yj)
+            for Y1 in self.Y:
+                min_dist = min([abs(Y1 - Y2) for Y2 in self.Y if Y1 != Y2])  # distance to closest neighbor
+                avg_dist += min_dist
+            avg_dist /= len(self.Y)
 
         self.avg_dist = avg_dist
 
+        max_mi = self.max_mi
+        c = 1
+        print(noise_to_add_parameters(avg_dist, c, max_mi))
+        noise = noise_to_add(avg_dist, c, max_mi)
 
     @property
     def Y_pairs(self) -> Optional[List[Tuple[Any, Any]]]:
@@ -188,9 +230,6 @@ class PACDataFrame:
         if self.Y is None:
             return None
         return list(zip(self.Y[::2], self.Y[1::2]))
-
-
-    
 
     def _n(self) -> int:
         """
