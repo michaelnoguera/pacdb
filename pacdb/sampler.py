@@ -7,8 +7,8 @@ from pyspark.sql.column import Column
 from typeguard import typechecked
 from functools import wraps
 from abc import ABC, abstractmethod
+import tqdm
 
-# Question: What is the case in which key_column_name will be sent as a parameter to the method? 
 def with_composite_key_column(df: DataFrame, columns: List[str], key_column_name: Optional[str] = None) -> Tuple[DataFrame, str]:
     """
     Add a column to the dataframe that is a concatenation of the values in the specified columns
@@ -71,7 +71,7 @@ class SamplerOptions():
     withReplacement: Optional[Union[float, bool]] = False
     fraction: Optional[Union[int, float]] = 0.5
     seed: Optional[int] = None
-    columns_to_sample_by: List[str] | None = None
+    columns_to_sample_by: Optional[List[str]] = None
 
 class Sampler(ABC):
     """
@@ -84,11 +84,17 @@ class Sampler(ABC):
         ...
 
     def __init__(self, df: Optional[DataFrame] = None, options: SamplerOptions = SamplerOptions()):
+        """
+        Sample with default sampling rate, replacement technique (with or without), and seed
+        """
         self.df = df
         self.options = options  # defaults to 50% w/o replacement
         pass
 
     def withOptions(self, options: SamplerOptions) -> "Sampler":
+        """
+        Sample with provided sampling rate, replacement technique (with or without), and seed
+        """
         self.options = options
         return self
 
@@ -120,10 +126,33 @@ class DataFrameSampler(Sampler):
     def __init__(self, df: Optional[DataFrame] = None):
         super().__init__(df)
 
+    def get_samples(self, df: DataFrame, user_defined_sampling_rate: Optional[float] = 0.5, query_filter: Optional[str] = None, aggr: Optional[Any] = None, trials: Optional[int] = 100) -> list:
+        samples = []
+
+        for i in tqdm(range(trials)):
+            if query_filter is not None and aggr is not None:
+                s = (df.sample()
+                    .filter(query_filter)  # run query on sample
+                    .agg(aggr))
+            elif query_filter is None:
+                s = (df.sample()
+                    .agg(aggr))
+            elif aggr is None:
+                s = (df.sample()
+                    .filter(query_filter))  # run query on sample
+
+            samples.append(s)  # store result of query
+        
+        # TODO: change based on the aggregation being performed
+        samples = [s * (1/user_defined_sampling_rate) for s in samples]  # so that counts are not halved
+
+        return samples
+
     def sample(self) -> DataFrame:
         """
         Returns self DataFrame with default options
         """
+        # Chai's Note: pyspark.sql.sample() does not guarantee Poisson i.i.d. sampling so we need to override or implement a custom function
         return self.df.sample(withReplacement=self.options.withReplacement, fraction=self.options.fraction, seed=self.options.seed)
     
     def sampleByColumns(self, cols: List[Union[Column, str]]) -> DataFrame:

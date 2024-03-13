@@ -13,6 +13,7 @@ from functools import wraps
 from abc import ABC, abstractmethod
 
 from .sampler import Sampler, SamplerOptions, DataFrameSampler
+from .query import QueryRewriter, Aggregator
 
 
 class PACDataFrame:
@@ -26,7 +27,7 @@ class PACDataFrame:
         """
         ...
 
-    def __init__(self, df: DataFrame, sampler: Optional[DataFrameSampler] = None):
+    def __init__(self, df: DataFrame, sampler: Optional[DataFrameSampler] = None, query_rewriter: Optional[QueryRewriter] = None):
         self.df = df
 
         if sampler is not None:
@@ -41,7 +42,11 @@ class PACDataFrame:
             # create a new sampler
             self.sampler = DataFrameSampler(self.df)
 
+        if query_rewriter is not None:
+            self.query_rewriter = query_rewriter
+
         self.predicate: Callable[[DataFrame], Any] = None
+        
 
     @classmethod
     def fromDataFrame(cls, df: DataFrame) -> "PACDataFrame":
@@ -114,6 +119,12 @@ class PACDataFrame:
         if self.predicate is None:
             return df
         return self.predicate(df)
+    
+    def add_filter(self, filter: Optional[str]):
+        return self.query_rewriter.add_filter(filter)
+
+    def map_to_function(self, aggregation: Optional[str]):
+        return self.query_rewriter.map_to_function(aggregation) 
     
     # def count(self, *args, **kwargs):
     #     s = self.sample()
