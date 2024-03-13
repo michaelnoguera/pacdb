@@ -1,6 +1,9 @@
-'''
+"""
 Contains logic for Gaussian Mechanism for adding noise
-'''
+"""
+
+from typing import NamedTuple
+
 
 class GaussianDistribution(NamedTuple):
     mean: float
@@ -22,7 +25,6 @@ def noise_to_add_parameters(avg_dist: float, c: float, max_mi: float) -> Gaussia
 
     return GaussianDistribution(0, noise_to_add_variance)
 
-# TODO: check PAC-ML to understand what avg_dist is and how it contributes to variance of Gaussian
 def noise_to_add(avg_dist: float, c: float, max_mi: float) -> float:
     """
     Returns a sample from a Gaussian distribution constructed from parameters
