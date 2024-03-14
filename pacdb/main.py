@@ -135,7 +135,6 @@ class PACDataFrame:
 
 
     ### PAC algorithm ###
-    @cache
     def _subsample(self) -> None:
         """
         Internal function.
@@ -153,7 +152,6 @@ class PACDataFrame:
 
         self.X = X
 
-    @cache
     def _measure_stability(self) -> None:
         """
         Internal function.
