@@ -24,7 +24,7 @@ df.insert(0, 'name', [fake.name() for _ in range(len(df))])
 df.rename(columns={'OccuPational Hazards': 'Occupational Hazards'}, inplace=True)
 df.rename(columns={'chronic Lung Disease': 'Chronic Lung Disease'}, inplace=True)
 df.rename(columns={'Level': 'Cancer'}, inplace=True)
-print(df.info())
+df.info()
 
 # save and overwrite lung.csv
 df.to_csv('lung.csv', index=False)

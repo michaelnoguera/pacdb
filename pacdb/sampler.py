@@ -21,7 +21,9 @@ def with_composite_key_column(df: DataFrame, columns: List[str], key_column_name
     Returns:
         Tuple: Dataframe with a new concatenated column and the column name
     """
-     
+
+    assert all(c in df.columns for c in columns), "All columns must be present in the dataframe"
+
     if key_column_name is None:
         key_column_name = "_".join(columns)
 
@@ -68,10 +70,10 @@ def sample_proportionately(df: DataFrame,
 
 @dataclass
 class SamplerOptions():
-    withReplacement: Optional[Union[float, bool]] = False
-    fraction: Optional[Union[int, float]] = 0.5
+    withReplacement: Optional[bool] = False
+    fraction: Union[int, float] = 0.5
     seed: Optional[int] = None
-    columns_to_sample_by: Optional[List[str]] = None
+    columns_to_sample_by: List[str] | None = None
 
 class Sampler(ABC):
     """
@@ -79,22 +81,12 @@ class Sampler(ABC):
     You can provide your own sampler by implementing this interface
     """
 
-    @overload
-    def __init__(self, df: Optional[DataFrame] = None):
+    def __init__(self, df: Optional[DataFrame] = None, options: SamplerOptions = SamplerOptions()):
+        self.df = df
+        self.options: SamplerOptions = options  # defaults to 50% w/o replacement
         ...
 
-    def __init__(self, df: Optional[DataFrame] = None, options: SamplerOptions = SamplerOptions()):
-        """
-        Sample with default sampling rate, replacement technique (with or without), and seed
-        """
-        self.df = df
-        self.options = options  # defaults to 50% w/o replacement
-        pass
-
     def withOptions(self, options: SamplerOptions) -> "Sampler":
-        """
-        Sample with provided sampling rate, replacement technique (with or without), and seed
-        """
         self.options = options
         return self
 
@@ -109,13 +101,13 @@ class Sampler(ABC):
         return self
 
     @abstractmethod
-    def sample() -> "DataFrame":
+    def sample(self) -> "DataFrame":
         pass
     
     @abstractmethod
     def sampleByColumns(
         self, 
-        cols: List[Union[Column, str]], 
+        cols: List[str], 
     ) -> "DataFrame":
         pass
 
@@ -125,6 +117,7 @@ class DataFrameSampler(Sampler):
 
     def __init__(self, df: Optional[DataFrame] = None):
         super().__init__(df)
+
 
     def get_samples(self, df: DataFrame, user_defined_sampling_rate: Optional[float] = 0.5, query_filter: Optional[str] = None, aggr: Optional[Any] = None, trials: Optional[int] = 100) -> list:
         samples = []
@@ -153,15 +146,24 @@ class DataFrameSampler(Sampler):
         Returns self DataFrame with default options
         """
         # Chai's Note: pyspark.sql.sample() does not guarantee Poisson i.i.d. sampling so we need to override or implement a custom function
+        if self.df is None:
+            raise ValueError("No dataframe attached to this sampler")
         return self.df.sample(withReplacement=self.options.withReplacement, fraction=self.options.fraction, seed=self.options.seed)
     
-    def sampleByColumns(self, cols: List[Union[Column, str]]) -> DataFrame:
+    def sampleByColumns(self, cols: List[str]) -> DataFrame:
         """
-        Returns sampled data
-        Args:
-            cols (List[Union[Column, str]]): List of columns to be sampled
+        Take a single sample of the dataframe, enforcing the restriction that all categories in the specified
+        columns must be evenly represented in the sample.
 
-        Returns:
-            DataFrame: the sampled DataFrame
+        Example:
+        `sampleByColumns(["column1"])` where column1 is a categorical column with options ["cats", "dogs"]
+        will try to return a DataFrame with an equal number of "cats" and "dogs" in the sample.
+
+        The proportions in the output may not be exact; the behavior of this function will match PySpark's
+        sampleBy function.
         """
+        if self.df is None:
+            raise ValueError("No dataframe attached to this sampler")
+        elif self.options.columns_to_sample_by is None:
+            raise ValueError("No columns to sample by specified, use withOption(s) to set")
         return sample_proportionately(self.df, cols, self.options.fraction, seed=self.options.seed)
