@@ -61,7 +61,7 @@ class PACDataFrame:
         """
         self.df = df
 
-        self.sampler = DataFrameSampler(self.df)
+        self.sampler: DataFrameSampler = DataFrameSampler(self.df)
         self.options = PACOptions()
 
         self.query: Callable[[DataFrame], Any] | None = None  # set by withQuery
@@ -94,7 +94,7 @@ class PACDataFrame:
         """
         if self.sampler is None:
             raise ValueError("No sampler attached to this dataframe")
-        self.sampler = self.sampler.withOptions(options)
+        self.sampler = self.sampler.withOptions(options)  # type: ignore  # TODO: fix abstract type error
         return self
     
     @property
@@ -180,12 +180,13 @@ class PACDataFrame:
         assert mi is not None, "Must set withMutualInformationBound() before _estimate_noise() or provide argument"
         tau = self.options.tau
         
-        avg_dist = 0
+        avg_dist: float = 0.
 
         for Y1, Y2 in tqdm(self.Y_pairs, desc="Measure Distances"):
             avg_dist += minimal_permutation_distance(Y1, Y2)
 
-        avg_dist /= len(self.Y_pairs)  # \bar\psi=\sum_{k=1}^{m} \psi_{\tau}^{(k)} / {m}
+        assert self.Y_pairs is not None
+        avg_dist /= float(len(self.Y_pairs))  # \bar\psi=\sum_{k=1}^{m} \psi_{\tau}^{(k)} / {m}
 
         self.avg_dist = avg_dist
 
@@ -197,6 +198,7 @@ class PACDataFrame:
         Yj = self._applyQuery(self.sampler.sample())
 
         nd = self.noise_distribution if noise_distribution is None else noise_distribution
+        assert nd is not None, "Must call _estimate_noise() before _noised_release() or provide argument"
         noise_to_add = nd.sample()
         noised_Yj = Yj + noise_to_add
         return noised_Yj
@@ -259,97 +261,3 @@ class PACDataFrame:
     #     Proxy all unmatched attribute calls to the underlying DataFrame
     #     """
     #     return getattr(self.df, name)
-    
-
-
-class DataFrameWrapper:
-    """
-    PAC wrapper around PySpark DataFrame.
-    """
-
-    def __init__(self, df: DataFrame, ctx: SparkSession) -> None:
-        """
-        Construct a new DataFrameWrapper wrapping a PySpark DataFrame. Must be used within a PACSession context.
-
-        Args:
-        - df: the PySpark DataFrame to wrap
-        - ctx: the PACSession context to use
-
-        Do not use this function directly; use `PACSession.createDataFrame` instead.
-        """
-        self.df = df
-        self.ctx = ctx
-    
-    def toDataFrame(self) -> DataFrame:
-        return self.df
-    
-    def isEmpty(self) -> bool:
-        return self.df.isEmpty()
-    
-    def count(self) -> int:
-        return self.df.count()
-    
-    def show(self, n: int = 20, truncate: bool = True) -> None:
-        self.df.show(n, truncate)
-
-    def collect(self) -> List[Row]:
-        return self.df.collect()
-    
-    def limit(self, num: int) -> "DataFrameWrapper":
-        return DataFrameWrapper(self.df.limit(num), self.ctx)
-    
-    def filter(self, condition: Column | str) -> "DataFrameWrapper":
-        """Spark wrapper. Filters rows using the given condition."""
-        return DataFrameWrapper(self.df.filter(condition), self.ctx)
-    
-    def select(self, *cols: List[Column] | List[str]) -> "DataFrameWrapper":
-        """Spark wrapper. Projects a set of expressions and returns a new DataFrameWrapper."""
-        return DataFrameWrapper(self.df.select(*cols), self.ctx)
-    
-    def withColumnRenamed(self, existing: str, new: str) -> "DataFrameWrapper":
-        """Spark wrapper. Renames a column."""
-        return DataFrameWrapper(self.df.withColumnRenamed(existing, new), self.ctx)
-    
-    def groupBy(self, *cols: List[Column] | List[str]) -> "GroupedDataWrapper":
-        """Spark wrapper. Groups the DataFrame using the specified columns."""
-        return GroupedDataWrapper(self.df.groupBy(*cols), self.ctx)
-    
-    def drop(self, *cols: List[str]) -> "DataFrameWrapper":
-        return DataFrameWrapper(self.df.drop(*cols), self.ctx)
-
-
-class GroupedDataWrapper:
-    """
-    PAC wrapper around PySpark GroupedData.
-    Implements the same methods as PySpark GroupedData, but returns DataFrameWrappers instead of DataFrames.
-    """
-
-    def __init__(self, gd: GroupedData, pacdf: DataFrameWrapper):
-        self.gd = gd
-        self.pacdf = pacdf
-        self._ctx = pacdf.ctx
-
-    def count(self) -> DataFrameWrapper:
-        return DataFrameWrapper(self.gd.count(), self._ctx)
-    
-    def mean(self, *cols: List[str]) -> DataFrameWrapper:
-        return DataFrameWrapper(self.gd.mean(*cols), self._ctx)
-    
-    def avg(self, *cols: List[str]) -> DataFrameWrapper:
-        return DataFrameWrapper(self.gd.avg(*cols), self._ctx)
-    
-    def max(self, *cols: List[str]) -> DataFrameWrapper:
-        return DataFrameWrapper(self.gd.max(*cols), self._ctx)
-    
-    def min(self, *cols: List[str]) -> DataFrameWrapper:
-        return DataFrameWrapper(self.gd.min(*cols), self._ctx)
-    
-
-    def sum(self, *cols: List[str]) -> DataFrameWrapper:
-        return DataFrameWrapper(self.gd.sum(*cols), self._ctx)
-    
-    def pivot(self, pivot_col: str, values: Optional[List[Union[bool, float, int, str]]]) -> DataFrameWrapper:
-        if values is None:
-            return GroupedDataWrapper(self.gd.pivot(pivot_col), self.pacdf)
-        else:
-            return GroupedDataWrapper(self.gd.pivot(pivot_col, values), self.pacdf)

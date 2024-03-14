@@ -27,7 +27,7 @@ def minimal_permutation_distance(a: List[np.ndarray], b: List[np.ndarray]) -> fl
 
     min_distance = float('inf')
     
-    distance = lambda pi: sum(np.linalg.norm(a[j] - b[pi[j]]) ** 2 / k for j in range(k))
+    distance = lambda pi: float(sum(np.linalg.norm(a[j] - b[pi[j]]) ** 2 / k for j in range(k)))
     min_distance = min(distance(pi) for pi in itertools.permutations(range(k)))  # Permutations on the block index [1:k]
     
     return min_distance
