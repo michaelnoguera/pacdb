@@ -17,4 +17,4 @@ def test_create_pacdf(spark_fixture):
 
     pac_lung_df = PACDataFrame(lung_df)
 
-    assert pac_lung_df.toDataFrame() == lung_df
+    assert pac_lung_df.df == lung_df

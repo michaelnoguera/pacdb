@@ -1,21 +1,13 @@
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import Enum
-from functools import cache
-from typing import (Any, Callable, Dict, List, NamedTuple, Optional, Tuple,
-                    Union, overload)
+from typing import (Any, Callable, List, Optional, Tuple)
 
-import numpy as np
-from pyspark.sql import DataFrame, GroupedData, SparkSession
-from pyspark.sql.column import Column
-from pyspark.sql.functions import col, concat_ws, count, lower, regexp_replace
-from pyspark.sql.types import Row, StringType
+from pyspark.sql import DataFrame
 from tqdm import tqdm
 
-from pacdb.distance import minimal_permutation_distance, value_distance
+from pacdb.distance import minimal_permutation_distance
 
 from .noise import GaussianDistribution, noise_to_add
-from .sampler import DataFrameSampler, Sampler, SamplerOptions
+from .sampler import DataFrameSampler, SamplerOptions
 
 
 @dataclass
@@ -41,23 +33,21 @@ class PACDataFrame:
 
     Example:
     ```
-    from pacdb import PACDataFrame, Sampler, DataFrameSampler, SamplerOptions
+    from pacdb import PACDataFrame, SamplerOptions
 
-    pac_lung_df = (PACDataFrame(lung_df)
+    pac_lung_df = (PACDataFrame.fromDataFrame(lung_df)
                     .withSamplerOptions(
                         SamplerOptions(
                             withReplacement=False, 
                             fraction=0.5
                         )
                     ))
-
-    pac_lung_df.sample().toPandas().head()
     ```
     """
 
     def __init__(self, df: DataFrame):
         """
-        Construct a new PACDataFrame from a PySpark DataFrame. Same as `fromDataFrame` but with additional optional parameters.
+        Construct a new PACDataFrame from a PySpark DataFrame. Use `fromDataFrame` instead.
         """
         self.df = df
 
@@ -81,10 +71,6 @@ class PACDataFrame:
         """
         return cls(df)
     
-    def toDataFrame(self) -> DataFrame:
-        # TODO: add computed noise to one sample and release only that
-        return self.df
-    
 
     ### Sampler methods ###
 
@@ -96,25 +82,7 @@ class PACDataFrame:
             raise ValueError("No sampler attached to this dataframe")
         self.sampler = self.sampler.withOptions(options)  # type: ignore  # TODO: fix abstract type error
         return self
-    
-    @property
-    def samplerOptions(self) -> SamplerOptions:
-        """
-        Return the options of the attached sampler.
-        """
-        if self.sampler is None:
-            raise ValueError("No sampler attached to this dataframe")
-        return self.sampler.options
 
-    @property
-    def sampling_rate(self) -> float:
-        """
-        Return the sampling rate of the attached sampler.
-        """
-        if self.sampler is None:
-            raise ValueError("No sampler attached to this dataframe")
-        return self.sampler.options.fraction
-    
 
     ### PAC inputs ###
 
@@ -135,6 +103,7 @@ class PACDataFrame:
 
 
     ### PAC algorithm ###
+
     def _subsample(self) -> None:
         """
         Internal function.
@@ -179,7 +148,7 @@ class PACDataFrame:
         mi = self.max_mi if mi is None else mi
         assert mi is not None, "Must set withMutualInformationBound() before _estimate_noise() or provide argument"
         tau = self.options.tau
-        
+
         avg_dist: float = 0.
 
         for Y1, Y2 in tqdm(self.Y_pairs, desc="Measure Distances"):
@@ -195,13 +164,20 @@ class PACDataFrame:
         #noise = noise_to_add(avg_dist, c, mi).sample()
 
     def _noised_release(self, noise_distribution: Optional[GaussianDistribution] = None) -> Any:
-        Yj = self._applyQuery(self.sampler.sample())
+        """
+        Internal function.
+        After _subsample, _measure_stability, and _estimate_noise, this function can be called to release
+        the query result with PAC privacy.
+        """
 
-        nd = self.noise_distribution if noise_distribution is None else noise_distribution
+        nd: GaussianDistribution = self.noise_distribution if noise_distribution is None else noise_distribution
         assert nd is not None, "Must call _estimate_noise() before _noised_release() or provide argument"
-        noise_to_add = nd.sample()
-        noised_Yj = Yj + noise_to_add
-        return noised_Yj
+
+        Xj: DataFrame = self.sampler.sample()
+        Yj = self._applyQuery(Xj)
+        delta = nd.sample()
+
+        return Yj + delta
 
     def releaseValue(self) -> Any:
         """
@@ -212,6 +188,8 @@ class PACDataFrame:
         self._estimate_noise()
         return self._noised_release()
 
+
+    ### Utility methods ###
 
     @property
     def Y_pairs(self) -> Optional[List[Tuple[Any, Any]]]:
@@ -227,6 +205,9 @@ class PACDataFrame:
         """
         return self.df.count()
     
+
+    ### Query methods ###
+
     def withQuery(self, query_function: Callable[[DataFrame], Any]) -> "PACDataFrame":
         """
         Set the query function to be made private.
@@ -255,9 +236,3 @@ class PACDataFrame:
         if self.query is None:
             return df
         return self.query(df)
-    
-    # def __getattr__(self, name):
-    #     """
-    #     Proxy all unmatched attribute calls to the underlying DataFrame
-    #     """
-    #     return getattr(self.df, name)
