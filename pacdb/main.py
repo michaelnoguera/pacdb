@@ -12,6 +12,8 @@ from pyspark.sql.functions import col, concat_ws, count, lower, regexp_replace
 from pyspark.sql.types import Row, StringType
 from tqdm import tqdm
 
+from pacdb.distance import minimal_permutation_distance, value_distance
+
 from .noise import GaussianDistribution, noise_to_add
 from .sampler import DataFrameSampler, Sampler, SamplerOptions
 
@@ -26,7 +28,11 @@ class PACOptions:
     max_mi: float = 1./8
     """maximum mutual information allowed for the query"""
     c: float = 0.001
-    """security parameter? TODO: meaning"""
+    """security parameter, lower bound for noise added"""
+    tau: int = 3
+    """security parameter, number of samples to use for minimal-permutation distance"""
+
+
 
 class PACDataFrame:
     """
@@ -60,8 +66,9 @@ class PACDataFrame:
 
         self.query: Callable[[DataFrame], Any] | None = None  # set by withQuery
         
-        self.X: Optional[List[DataFrame]] = None  # set by _subsample
-        self.Y: Optional[List[Any]] = None  # set by _measure
+        self.X: Optional[List[List[DataFrame]]] = None  # set by _subsample
+        """X contains samples of the dataframe, in sets of `tau`. `len(X) = trials`. Set by `_subsample`."""
+        self.Y: Optional[List[List[Any]]] = None  # set by _measure
 
         self.avg_dist: Optional[float] = None  # set by _estimate_noise
         self.noise_distribution: Optional[GaussianDistribution] = None  # set by _estimate_noise
@@ -134,10 +141,15 @@ class PACDataFrame:
         Internal function.
         Calls `sample()` `trials` times to generate X.
         """
-        X: List[DataFrame] = []
+        X: List[List[DataFrame]] = []
+        tau = self.options.tau
+
+        assert tau >= 1, "tau must be at least 1, otherwise no samples will be taken"
         
         for i in tqdm(range(self.trials * 2), desc="Subsample"):
-            X.append(self.sampler.sample())
+            # twice as many because we will use them in pairs
+            # for each trial, take `tau` samples
+            X.append([self.sampler.sample() for _ in range(tau)])
 
         self.X = X
 
@@ -150,53 +162,44 @@ class PACDataFrame:
 
         assert self.X is not None, "Must call _subsample() before _measure()"
 
-        Y: list[int] = []
+        Y: List[List[int|float]] = []
         
         for Xi in tqdm(self.X, desc="Measure Stability"):
-            Yi = self._applyQuery(Xi)
-            # TODO solve correction factor here: Yi = Yi * (1/self.df.sampling_rate)
+            Yi = [self._applyQuery(Xit) for Xit in Xi]
             Y.append(Yi)
 
         self.Y = Y
 
-    def _estimate_noise(self) -> None:
+    def _estimate_noise(self, mi: Optional[float] = None, c: Optional[float] = None) -> None:
         """
         Internal function.
-        Estimates the noise needed to privatize the query based on the minimal pertubation distance between Y entries.
+        Estimates the noise needed to privatize the query based on the minimal permutation distance between Y entries.
         Sets `self.avg_dist`.
         """
 
         assert self.Y is not None, "Must call _measure() before _estimate_noise()"
-        assert self.max_mi is not None, "Must set withMutualInformationBound() before _estimate_noise()"
-
+        mi = self.max_mi if mi is None else mi
+        assert mi is not None, "Must set withMutualInformationBound() before _estimate_noise() or provide argument"
+        tau = self.options.tau
+        
         avg_dist = 0
-        distance_calculator = "all-pairs"
 
-        if distance_calculator == "within-pairs":
-            # Seems most consistent with Algorithm 2?
-            for Y1, Y2 in tqdm(self.Y_pairs, desc="Measure Distances"):  # iterator is k
-                # \psi^{(k)}=d_\pi( y^{(k,1)}, y^{(k,2)})
-                # the minimal pertubation distance between scalars is the same as 1D vectors?
-                avg_dist += abs(Y1 - Y2)
-            avg_dist /= len(self.Y_pairs) # \bar\psi=\frac{\sum_{k=1}^{m} \psi_{\tau}^{(k)}}{m}
-        elif distance_calculator == "all-pairs":
-            # TODO: Here we assume that Yi is one-dimensional, meaning that distance is defined as abs(Yi - Yj)
-            for Y1 in tqdm(self.Y, desc="Measure Distances"):
-                min_dist = min([abs(Y1 - Y2) for Y2 in self.Y if Y1 != Y2])  # distance to closest neighbor
-                avg_dist += min_dist
-            avg_dist /= len(self.Y)
+        for Y1, Y2 in tqdm(self.Y_pairs, desc="Measure Distances"):
+            avg_dist += minimal_permutation_distance(Y1, Y2)
+
+        avg_dist /= len(self.Y_pairs)  # \bar\psi=\sum_{k=1}^{m} \psi_{\tau}^{(k)} / {m}
 
         self.avg_dist = avg_dist
 
-        c, max_mi = self.options.c, self.options.max_mi
-        self.noise_distribution = noise_to_add(avg_dist, c, max_mi)
-        print(noise_to_add(avg_dist, c, max_mi))
-        noise = noise_to_add(avg_dist, c, max_mi).sample()
+        c = self.options.c if c is None else c
+        self.noise_distribution = noise_to_add(avg_dist, c, mi)
+        #noise = noise_to_add(avg_dist, c, mi).sample()
 
-    def _noised_release(self):
+    def _noised_release(self, noise_distribution: Optional[GaussianDistribution] = None) -> Any:
         Yj = self._applyQuery(self.sampler.sample())
 
-        noise_to_add = self.noise_distribution.sample()
+        nd = self.noise_distribution if noise_distribution is None else noise_distribution
+        noise_to_add = nd.sample()
         noised_Yj = Yj + noise_to_add
         return noised_Yj
 
@@ -261,3 +264,94 @@ class PACDataFrame:
     
 
 
+class DataFrameWrapper:
+    """
+    PAC wrapper around PySpark DataFrame.
+    """
+
+    def __init__(self, df: DataFrame, ctx: SparkSession) -> None:
+        """
+        Construct a new DataFrameWrapper wrapping a PySpark DataFrame. Must be used within a PACSession context.
+
+        Args:
+        - df: the PySpark DataFrame to wrap
+        - ctx: the PACSession context to use
+
+        Do not use this function directly; use `PACSession.createDataFrame` instead.
+        """
+        self.df = df
+        self.ctx = ctx
+    
+    def toDataFrame(self) -> DataFrame:
+        return self.df
+    
+    def isEmpty(self) -> bool:
+        return self.df.isEmpty()
+    
+    def count(self) -> int:
+        return self.df.count()
+    
+    def show(self, n: int = 20, truncate: bool = True) -> None:
+        self.df.show(n, truncate)
+
+    def collect(self) -> List[Row]:
+        return self.df.collect()
+    
+    def limit(self, num: int) -> "DataFrameWrapper":
+        return DataFrameWrapper(self.df.limit(num), self.ctx)
+    
+    def filter(self, condition: Column | str) -> "DataFrameWrapper":
+        """Spark wrapper. Filters rows using the given condition."""
+        return DataFrameWrapper(self.df.filter(condition), self.ctx)
+    
+    def select(self, *cols: List[Column] | List[str]) -> "DataFrameWrapper":
+        """Spark wrapper. Projects a set of expressions and returns a new DataFrameWrapper."""
+        return DataFrameWrapper(self.df.select(*cols), self.ctx)
+    
+    def withColumnRenamed(self, existing: str, new: str) -> "DataFrameWrapper":
+        """Spark wrapper. Renames a column."""
+        return DataFrameWrapper(self.df.withColumnRenamed(existing, new), self.ctx)
+    
+    def groupBy(self, *cols: List[Column] | List[str]) -> "GroupedDataWrapper":
+        """Spark wrapper. Groups the DataFrame using the specified columns."""
+        return GroupedDataWrapper(self.df.groupBy(*cols), self.ctx)
+    
+    def drop(self, *cols: List[str]) -> "DataFrameWrapper":
+        return DataFrameWrapper(self.df.drop(*cols), self.ctx)
+
+
+class GroupedDataWrapper:
+    """
+    PAC wrapper around PySpark GroupedData.
+    Implements the same methods as PySpark GroupedData, but returns DataFrameWrappers instead of DataFrames.
+    """
+
+    def __init__(self, gd: GroupedData, pacdf: DataFrameWrapper):
+        self.gd = gd
+        self.pacdf = pacdf
+        self._ctx = pacdf.ctx
+
+    def count(self) -> DataFrameWrapper:
+        return DataFrameWrapper(self.gd.count(), self._ctx)
+    
+    def mean(self, *cols: List[str]) -> DataFrameWrapper:
+        return DataFrameWrapper(self.gd.mean(*cols), self._ctx)
+    
+    def avg(self, *cols: List[str]) -> DataFrameWrapper:
+        return DataFrameWrapper(self.gd.avg(*cols), self._ctx)
+    
+    def max(self, *cols: List[str]) -> DataFrameWrapper:
+        return DataFrameWrapper(self.gd.max(*cols), self._ctx)
+    
+    def min(self, *cols: List[str]) -> DataFrameWrapper:
+        return DataFrameWrapper(self.gd.min(*cols), self._ctx)
+    
+
+    def sum(self, *cols: List[str]) -> DataFrameWrapper:
+        return DataFrameWrapper(self.gd.sum(*cols), self._ctx)
+    
+    def pivot(self, pivot_col: str, values: Optional[List[Union[bool, float, int, str]]]) -> DataFrameWrapper:
+        if values is None:
+            return GroupedDataWrapper(self.gd.pivot(pivot_col), self.pacdf)
+        else:
+            return GroupedDataWrapper(self.gd.pivot(pivot_col, values), self.pacdf)
