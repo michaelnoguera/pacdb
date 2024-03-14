@@ -35,23 +35,14 @@ class PACDataFrame:
     ```
     """
 
-    def __init__(self, df: DataFrame, sampler: Optional[DataFrameSampler] = None):
+    def __init__(self, df: DataFrame):
         """
         Construct a new PACDataFrame from a PySpark DataFrame. Same as `fromDataFrame` but with additional optional parameters.
         """
         self.df = df
+        self.sampler = DataFrameSampler(self.df)
 
-        if sampler is not None:
-            # provided a sampler, make sure it matches the dataframe
-            if sampler.df is None:
-                self.sampler = sampler.withDataFrame(self.df)
-            elif sampler.df != self.df:
-                raise ValueError("Sampler dataframe does not match dataframe")
-            else: # sampler.df == self.df
-                self.sampler = sampler
-        else:
-            # create a new sampler
-            self.sampler = DataFrameSampler(self.df)
+        self.querySteps: List[Callable] = []
 
         self.query: Callable[[DataFrame], Any] | None = None  # set by withQuery
 
@@ -85,15 +76,6 @@ class PACDataFrame:
         if self.sampler is None:
             raise ValueError("No sampler attached to this dataframe")
         self.sampler = self.sampler.withOptions(options)
-        return self
-    
-    def withSamplerOption(self, option: str, value: Any) -> "PACDataFrame":
-        """
-        Set a single sampling option for the attached sampler
-        """
-        if self.sampler is None:
-            raise ValueError("No sampler attached to this dataframe")
-        self.sampler = self.sampler.withOption(option, value)
         return self
     
     @property
