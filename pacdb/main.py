@@ -13,7 +13,7 @@ from functools import wraps
 from abc import ABC, abstractmethod
 
 from .sampler import Sampler, SamplerOptions, DataFrameSampler
-from .query import QueryRewriter, Aggregator
+from .query import QueryRewriter
 
 
 class PACDataFrame:
