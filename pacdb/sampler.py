@@ -102,6 +102,17 @@ class DataFrameSampler(Sampler):
         return self.df.sample(withReplacement=self.options.withReplacement, fraction=self.options.fraction, seed=self.options.seed)
     
     def sampleByColumns(self, cols: List[str]) -> DataFrame:
+        """
+        Take a single sample of the dataframe, enforcing the restriction that all categories in the specified
+        columns must be evenly represented in the sample.
+
+        Example:
+        `sampleByColumns(["column1"])` where column1 is a categorical column with options ["cats", "dogs"]
+        will try to return a DataFrame with an equal number of "cats" and "dogs" in the sample.
+
+        The proportions in the output may not be exact; the behavior of this function will match PySpark's
+        sampleBy function.
+        """
         if self.df is None:
             raise ValueError("No dataframe attached to this sampler")
         elif self.options.columns_to_sample_by is None:
