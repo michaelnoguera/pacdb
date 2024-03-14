@@ -193,8 +193,7 @@ class PACDataFrame:
         After _subsample, _measure_stability, and _estimate_noise, this function can be called to release
         the query result with PAC privacy.
         """
-
-        nd: GaussianDistribution = self.noise_distribution if noise_distribution is None else noise_distribution
+        nd = noise_distribution if noise_distribution is not None else self.noise_distribution
         assert nd is not None, "Must call _estimate_noise() before _noised_release() or provide argument"
 
         Xj: DataFrame = self.sampler.sample()
