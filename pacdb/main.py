@@ -128,7 +128,7 @@ class PACDataFrame:
 
     ### PAC algorithm ###
 
-    def _subsample(self) -> None:
+    def _subsample(self, quiet=False) -> None:
         """
         Internal function.
         Calls `sample()` `trials` times to generate X.
@@ -138,14 +138,14 @@ class PACDataFrame:
 
         assert tau >= 1, "tau must be at least 1, otherwise no samples will be taken"
         
-        for i in tqdm(range(self.trials * 2), desc="Subsample"):
+        for i in tqdm(range(self.options.trials * 2), desc="Subsample", disable=quiet):
             # twice as many because we will use them in pairs
             # for each trial, take `tau` samples
             X.append([self.sampler.sample() for _ in range(tau)])
 
         self.X = X
 
-    def _measure_stability(self) -> None:
+    def _measure_stability(self, quiet=False) -> None:
         """
         Internal function.
         Applies `self.query` to each X to generate Y. Sets the Y (and by extension Y_pairs) instance variables.
@@ -155,13 +155,13 @@ class PACDataFrame:
 
         Y: List[List[int|float]] = []
         
-        for Xi in tqdm(self.X, desc="Measure Stability"):
+        for Xi in tqdm(self.X, desc="Measure Stability", disable=quiet):
             Yi = [self._applyQuery(Xit) for Xit in Xi]
             Y.append(Yi)
 
         self.Y = Y
 
-    def _estimate_noise(self, mi: Optional[float] = None, c: Optional[float] = None) -> None:
+    def _estimate_noise(self, mi: Optional[float] = None, c: Optional[float] = None, quiet=False) -> None:
         """
         Internal function.
         Estimates the noise needed to privatize the query based on the minimal permutation distance between Y entries.
@@ -169,13 +169,13 @@ class PACDataFrame:
         """
 
         assert self.Y is not None, "Must call _measure() before _estimate_noise()"
-        mi = self.max_mi if mi is None else mi
+        mi = self.options.max_mi if mi is None else mi
         assert mi is not None, "Must set withMutualInformationBound() before _estimate_noise() or provide argument"
         tau = self.options.tau
 
         avg_dist: float = 0.
 
-        for Y1, Y2 in tqdm(self.Y_pairs, desc="Measure Distances"):
+        for Y1, Y2 in tqdm(self.Y_pairs, desc="Measure Distances", disable=quiet):
             avg_dist += minimal_permutation_distance(Y1, Y2)
 
         assert self.Y_pairs is not None
@@ -202,13 +202,13 @@ class PACDataFrame:
 
         return Yj + delta
 
-    def releaseValue(self) -> Any:
+    def releaseValue(self, quiet=False) -> Any:
         """
         Execute the query with PAC privacy.
         """
-        self._subsample()
-        self._measure_stability()
-        self._estimate_noise()
+        self._subsample(quiet=quiet)
+        self._measure_stability(quiet=quiet)
+        self._estimate_noise(quiet=quiet)
         return self._noised_release()
 
 
