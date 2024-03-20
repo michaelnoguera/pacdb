@@ -21,8 +21,6 @@ class PACOptions:
     """maximum mutual information allowed for the query"""
     c: float = 0.001
     """security parameter, lower bound for noise added"""
-    tau: int = 3
-    """security parameter, number of samples to use for minimal-permutation distance"""
 
 
 
@@ -56,9 +54,9 @@ class PACDataFrame:
 
         self.query: Callable[[DataFrame], Any] | None = None  # set by withQuery
         
-        self.X: Optional[List[List[DataFrame]]] = None  # set by _subsample
-        """X contains samples of the dataframe, in sets of `tau`. `len(X) = trials`. Set by `_subsample`."""
-        self.Y: Optional[List[List[Any]]] = None  # set by _measure
+        self.X: Optional[List[DataFrame]] = None  # set by _subsample
+        """X contains samples of the dataframe. `len(X) = trials`. Set by `_subsample`."""
+        self.Y: Optional[List[Any]] = None  # set by _measure
 
         self.avg_dist: Optional[float] = None  # set by _estimate_noise
         self.noise_distribution: Optional[GaussianDistribution] = None  # set by _estimate_noise
@@ -83,7 +81,6 @@ class PACDataFrame:
                         trials = 50,
                         max_mi = 1/8,
                         c = 1e-6,
-                        tau = 3
                     )
                 )
                 .withSamplerOptions(
@@ -133,15 +130,11 @@ class PACDataFrame:
         Internal function.
         Calls `sample()` `trials` times to generate X.
         """
-        X: List[List[DataFrame]] = []
-        tau = self.options.tau
-
-        assert tau >= 1, "tau must be at least 1, otherwise no samples will be taken"
+        X: List[DataFrame] = []
         
-        for i in tqdm(range(self.options.trials * 2), desc="Subsample", disable=quiet):
+        for _ in tqdm(range(self.options.trials * 2), desc="Subsample", disable=quiet):
             # twice as many because we will use them in pairs
-            # for each trial, take `tau` samples
-            X.append([self.sampler.sample() for _ in range(tau)])
+            X.append(self.sampler.sample())
 
         self.X = X
 
@@ -153,10 +146,10 @@ class PACDataFrame:
 
         assert self.X is not None, "Must call _subsample() before _measure()"
 
-        Y: List[List[int|float]] = []
+        Y: List[int|float] = []
         
         for Xi in tqdm(self.X, desc="Measure Stability", disable=quiet):
-            Yi = [self._applyQuery(Xit) for Xit in Xi]
+            Yi = self._applyQuery(Xi)
             Y.append(Yi)
 
         self.Y = Y
@@ -171,7 +164,7 @@ class PACDataFrame:
         assert self.Y is not None, "Must call _measure() before _estimate_noise()"
         mi = self.options.max_mi if mi is None else mi
         assert mi is not None, "Must set withMutualInformationBound() before _estimate_noise() or provide argument"
-        tau = self.options.tau
+
 
         avg_dist: float = 0.
 
