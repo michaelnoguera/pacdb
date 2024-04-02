@@ -252,3 +252,16 @@ class PACDataFrame:
         if self.query is None:
             return df
         return self.query(df)
+    
+    @staticmethod
+    def _unwrapDataFrame(df: DataFrame, labelColumn: Optional[str | Column] = None) -> np.ndarray:
+        """
+        Convert a PySpark DataFrame into a numpy vector.
+        """
+    
+        columns = df.columns
+        if labelColumn is not None:
+            columns.remove(labelColumn)
+        rows = df.collect()
+
+        return np.array(list([row[col] for col in columns for row in rows]))
