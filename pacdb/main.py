@@ -1,13 +1,30 @@
 from dataclasses import dataclass
-from typing import (Any, Callable, List, Optional, Tuple)
+from typing import Any, List, Optional
+from typing_extensions import Protocol
 
-from pyspark.sql import DataFrame
+import numpy as np
+
+from pyspark.sql import DataFrame, Column
+import pyspark.sql.types as T
+import pyspark.pandas as ps
+
+from .sampler import DataFrameSampler, SamplerOptions
+
 from tqdm import tqdm
 
-from pacdb.distance import minimal_permutation_distance
 
-from .noise import GaussianDistribution, noise_to_add
-from .sampler import DataFrameSampler, SamplerOptions
+class QueryFunction(Protocol):
+    """
+    Any function that takes as input a `pyspark.sql.DataFrame` and returns a
+    `pyspark.sql.DataFrame`.
+
+    Example:
+    ```
+    def query(df):
+        return df.filter(df["absences"] >= 5).agg(F.count("*"))
+    ```
+    """
+    def __call__(self, df: DataFrame) -> DataFrame: ...
 
 
 @dataclass
@@ -21,9 +38,6 @@ class PACOptions:
     """maximum mutual information allowed for the query"""
     c: float = 0.001
     """security parameter, lower bound for noise added"""
-    tau: int = 3
-    """security parameter, number of samples to use for minimal-permutation distance"""
-
 
 
 class PACDataFrame:
@@ -50,19 +64,9 @@ class PACDataFrame:
         Construct a new PACDataFrame from a PySpark DataFrame. Use `fromDataFrame` instead.
         """
         self.df = df
-
         self.sampler: DataFrameSampler = DataFrameSampler(self.df)
         self.options = PACOptions()
-
-        self.query: Callable[[DataFrame], Any] | None = None  # set by withQuery
-        
-        self.X: Optional[List[List[DataFrame]]] = None  # set by _subsample
-        """X contains samples of the dataframe, in sets of `tau`. `len(X) = trials`. Set by `_subsample`."""
-        self.Y: Optional[List[List[Any]]] = None  # set by _measure
-
-        self.avg_dist: Optional[float] = None  # set by _estimate_noise
-        self.noise_distribution: Optional[GaussianDistribution] = None  # set by _estimate_noise
-
+        self.query: QueryFunction | None = None  # set by withQuery
 
     @classmethod
     def fromDataFrame(cls, df: DataFrame) -> "PACDataFrame":
@@ -74,24 +78,6 @@ class PACDataFrame:
     def withOptions(self, options: PACOptions) -> "PACDataFrame":
         """
         Set the PAC options for the dataframe.
-
-        Example:
-        ```
-        pac_defaulters_df = (PACDataFrame(defaulters)
-                .withOptions(
-                    PACOptions(
-                        trials = 50,
-                        max_mi = 1/8,
-                        c = 1e-6,
-                        tau = 3
-                    )
-                )
-                .withSamplerOptions(
-                    SamplerOptions(
-                        fraction=0.5
-                    )
-                ))
-        ```
         """
         self.options = options
         return self
@@ -128,134 +114,207 @@ class PACDataFrame:
 
     ### PAC algorithm ###
 
-    def _subsample(self, quiet=False) -> None:
-        """
-        Internal function.
-        Calls `sample()` `trials` times to generate X.
-        """
-        X: List[List[DataFrame]] = []
-        tau = self.options.tau
-
-        assert tau >= 1, "tau must be at least 1, otherwise no samples will be taken"
+    def _produce_one_sampled_output(self) -> np.ndarray:
+        X: DataFrame = self.sampler.sample()
+        Y: DataFrame = self._applyQuery(X)
+        output: np.ndarray = self._unwrapDataFrame(Y)
+        return output
         
-        for i in tqdm(range(self.options.trials * 2), desc="Subsample", disable=quiet):
-            # twice as many because we will use them in pairs
-            # for each trial, take `tau` samples
-            X.append([self.sampler.sample() for _ in range(tau)])
-
-        self.X = X
-
-    def _measure_stability(self, quiet=False) -> None:
+    def _estimate_hybrid_noise(
+        self,
+        max_mi: Optional[float] = None,
+        quiet: bool = False
+        ) -> List[float]:
         """
-        Internal function.
-        Applies `self.query` to each X to generate Y. Sets the Y (and by extension Y_pairs) instance variables.
-        """
+        Use the hybrid algorithm to determine how much noise to add to each dimension of the query result.
 
-        assert self.X is not None, "Must call _subsample() before _measure()"
-
-        Y: List[List[int|float]] = []
+        Parameters:
+        max_mi: float, optional
+            Maximum mutual information allowed for the query. If not provided, use the PACDataFrame setting.
         
-        for Xi in tqdm(self.X, desc="Measure Stability", disable=quiet):
-            Yi = [self._applyQuery(Xit) for Xit in Xi]
-            Y.append(Yi)
-
-        self.Y = Y
-
-    def _estimate_noise(self, mi: Optional[float] = None, c: Optional[float] = None, quiet=False) -> None:
-        """
-        Internal function.
-        Estimates the noise needed to privatize the query based on the minimal permutation distance between Y entries.
-        Sets `self.avg_dist`.
+        Returns:
+        noise: List[float]
+            How much noise to add to each dimension of the query result vector. The value in noise[i] is the
+            variance of a Gaussian distribution from which to sample noise to add to the i-th dimension of the
+            query result.
         """
 
-        assert self.Y is not None, "Must call _measure() before _estimate_noise()"
-        mi = self.options.max_mi if mi is None else mi
-        assert mi is not None, "Must set withMutualInformationBound() before _estimate_noise() or provide argument"
-        tau = self.options.tau
+        if max_mi is None:  # optional argument, otherwise use PACDataFrame setting
+            max_mi = self.options.max_mi
 
-        avg_dist: float = 0.
+        eta: float = 0.05  # convergence threshold  # TODO what should eta be?
 
-        for Y1, Y2 in tqdm(self.Y_pairs, desc="Measure Distances", disable=quiet):
-            avg_dist += minimal_permutation_distance(Y1, Y2)
+        # r = max([np.linalg.norm(x) for x in train_x])
 
-        assert self.Y_pairs is not None
-        avg_dist /= float(len(self.Y_pairs))  # \bar\psi=\sum_{k=1}^{m} \psi_{\tau}^{(k)} / {m}
+        # We do not need to create a new set of ordered keys to 'canonicalize' the data, because
+        # the data is already in a consistent column order.
 
-        self.avg_dist = avg_dist
+        # Use the identity matrix for our projection matrix
+        dimensions = len(self._produce_one_sampled_output())
+        proj_matrix: np.ndarray = np.eye(dimensions)
 
-        c = self.options.c if c is None else c
-        self.noise_distribution = noise_to_add(avg_dist, c, mi)
-        #noise = noise_to_add(avg_dist, c, mi).sample()
+        if not quiet:
+            print(f"max_mi: {max_mi}, eta: {eta}, dimensions: {dimensions}")
+            print("Using the identity matrix as the projection matrix.")
 
-    def _noised_release(self, noise_distribution: Optional[GaussianDistribution] = None) -> Any:
-        """
-        Internal function.
-        After _subsample, _measure_stability, and _estimate_noise, this function can be called to release
-        the query result with PAC privacy.
-        """
-        nd = noise_distribution if noise_distribution is not None else self.noise_distribution
-        assert nd is not None, "Must call _estimate_noise() before _noised_release() or provide argument"
+        # projected samples used to estimate variance in each basis direction
+        # est_y[i] is a list of magnitudes of the outputs in the i-th basis direction
+        est_y: List[List[np.ndarray]] = [[] for _ in range(dimensions)]
+        prev_ests: List[np.floating[Any]] = [np.inf for _ in range(dimensions)] # to measure change per iteration for convergence
 
-        Xj: DataFrame = self.sampler.sample()
-        Yj = self._applyQuery(Xj)
-        delta = nd.sample()
+        converged = False
+        curr_trial = 0
 
-        return Yj + delta
+        if not quiet:
+            progress = tqdm()
 
-    def releaseValue(self, quiet=False) -> Any:
+        while not converged:
+            output: np.ndarray = self._produce_one_sampled_output()
+            assert len(output) == dimensions
+
+            # Compute the magnitude of the output in each of the basis directions, update the estimate lists
+            for i in range(len(output)):
+                est_y[i].append(np.matmul(proj_matrix[i].T, output.T))
+
+            # Every 10 trials, check for convergence
+            if curr_trial % 10 == 0:
+                if not quiet:
+                    loss = sum(abs(np.var(est_y[i]) - prev_ests[i]) for i in range(dimensions))
+                    target = eta * dimensions
+                    progress.update(10)
+                    progress.set_postfix({"loss": loss, "target": target})
+
+                # If all dimensions' variance estimates changed by less than eta, we have converged
+                if all(abs(np.var(est_y[i]) - prev_ests[i]) <= eta for i in range(dimensions)):
+                    converged = True
+                else:
+                    # we have not converged, so update the previous estimates and continue
+                    prev_ests = [np.var(est_y[i]) for i in range(dimensions)]
+            curr_trial += 1
+
+        # Now that we have converged, get the variance in each basis direction
+        fin_var: List[np.floating[Any]] = [np.var(est_y[i]) for i in range(dimensions)]
+
+        if not quiet:
+            progress.close()
+            print(f"Converged after {curr_trial} trials")
+            print(f"Final variance estimates: {fin_var}")
+
+        sqrt_total_var = sum(fin_var)**0.5
+        print(f'sqrt total var is {sqrt_total_var}')
+
+        noise: List[float] = [np.inf for _ in range(dimensions)]
+        for i in range(dimensions):
+            noise[i] = 1./max_mi**0.5 * fin_var[i]**0.5 * sqrt_total_var
+
+        print(f'Computed noise (variances) is {noise}')
+
+        return noise
+
+    @staticmethod
+    def _add_noise(result: np.ndarray, noise: List[float], quiet=False) -> np.ndarray:
+        # noise is an array of variances, one for each dimension of the query result
+        noised = []
+        for i in range(len(result)):
+            noised.append(result[i] + np.random.normal(0, noise[i]))
+
+        if not quiet: 
+            print(f'Sample: {result} + Noise = Noised: {noised}')
+        
+        return np.array(noised)
+
+    def releaseValue(self, quiet=False) -> DataFrame:
         """
         Execute the query with PAC privacy.
         """
-        self._subsample(quiet=quiet)
-        self._measure_stability(quiet=quiet)
-        self._estimate_noise(quiet=quiet)
-        return self._noised_release()
+        
+        X: DataFrame = self.sampler.sample()
+        Y: DataFrame = self._applyQuery(X) 
+        output: np.ndarray = self._unwrapDataFrame(Y)
 
+        if not quiet:
+            print("Found output format of query: ")
+            zeroes = np.zeros(output.shape)
+            self._updateDataFrame(zeroes, Y).show()
 
-    ### Utility methods ###
+        noise: List[float] = self._estimate_hybrid_noise()
 
-    @property
-    def Y_pairs(self) -> Optional[List[Tuple[Any, Any]]]:
-        """ Generator function so that Y only needs to be stored once but Y_pairs is still accessible. """
-        if self.Y is None:
-            return None
-        return list(zip(self.Y[::2], self.Y[1::2]))
+        noised_output: np.ndarray = self._add_noise(output, noise, quiet=quiet)
 
-    def _n(self) -> int:
-        """
-        Return the exact number of rows in the underlying dataframe, for use in PAC algorithm. This is 
-        privacy-sensitive and should not be used to release information about the underlying dataframe!
-        """
-        return self.df.count()
-    
+        output_df = self._updateDataFrame(noised_output, Y)
+
+        if not quiet:
+            print("Inserting to dataframe:")
+            output_df.show()
+        
+        return output_df
+
 
     ### Query methods ###
 
-    def withQuery(self, query_function: Callable[[DataFrame], Any]) -> "PACDataFrame":
+    def withQuery(self, query_function: QueryFunction) -> "PACDataFrame":
         """
         Set the query function to be made private.
-
-        Example:
-        ```
-        pac_lung_df: PACDataFrame = PACDataFrame.fromDataFrame(lung_df)
-               
-        # Define your query as a function
-        def A(x: DataFrame) -> int:
-            y = (x.filter(lung_df["Smoking"] >= 3)
-                    .count())
-            return y
-
-        # Attach the query function to the PACDataFrame
-        pac_lung_df = pac_lung_df.withQuery(A)
-        ```
         """
         self.query = query_function
         return self
     
-    def _applyQuery(self, df: DataFrame) -> Any:
+    def _applyQuery(self, df: DataFrame) -> DataFrame:
         """
         Directly apply the query to the given dataframe and return the exact output. This is not private at all!
         """
         if self.query is None:
-            return df
+            raise AttributeError("No query set. Use withQuery() to set the query function.")
+        
+        query: QueryFunction = self.query
+
+        if not isinstance(df, DataFrame):  # runtime type check
+            raise ValueError("Input to query function must be a PySpark DataFrame")
+        
+        y: DataFrame = query(df)
+        
+        if not isinstance(y, DataFrame):  # runtime type check
+            raise ValueError("Output of query function must be a PySpark DataFrame")
+        
         return self.query(df)
+    
+    @staticmethod
+    def _unwrapDataFrame(df: DataFrame) -> np.ndarray:
+        """
+        Convert a PySpark DataFrame into a numpy vector.
+        This is the same as "canonicalizing" the data as described in the PAC-ML paper.
+        """
+        
+        # Filter to only numeric columns and coerce to numpy array
+        numeric_columns: List[str] = [f.name for f in df.schema.fields if isinstance(f.dataType, T.NumericType)]
+        df_numeric: DataFrame = df.select(*numeric_columns)  # select only numeric columns
+        np_array: np.ndarray = np.array(df_numeric.collect())
+
+        # Flatten the numpy array column-wise
+        flat: np.ndarray = np_array.flatten(order="F")
+
+        return flat
+
+    @staticmethod
+    def _updateDataFrame(vec: np.ndarray, df: DataFrame) -> DataFrame:
+        """
+        Use the values of the numpy vector to update the PySpark DataFrame.
+        """
+
+        # Recompute shape and columns
+        numeric_columns: List[str] = [f.name for f in df.schema.fields if isinstance(f.dataType, T.NumericType)]
+        df_numeric: DataFrame = df.select(*numeric_columns)  # select only numeric columns
+        shape = np.array(df_numeric.collect()).shape
+
+        # -> 2D
+        np_array = vec.reshape(shape, order="F")
+
+        # -> Pandas-On-Spark (attach column labels)
+        new_pandas: ps.DataFrame = ps.DataFrame(np_array, columns=numeric_columns)
+
+        # Merge the new values with the old DataFrame
+        old_pandas: ps.DataFrame = df.pandas_api()
+        old_pandas.update(new_pandas)
+        updated_df: DataFrame = old_pandas.to_spark()
+
+        return updated_df
