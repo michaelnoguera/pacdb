@@ -219,7 +219,7 @@ class PACDataFrame:
             noised.append(result[i] + np.random.normal(0, noise[i]))
 
         if not quiet: 
-            print(f'Sample: {result} + Noise: {noise} = Noised: {noised}')
+            print(f'Sample: {result} + Noise = Noised: {noised}')
         
         return np.array(noised)
 
