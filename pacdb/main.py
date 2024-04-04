@@ -10,7 +10,8 @@ import pyspark.pandas as ps
 
 from .sampler import DataFrameSampler, SamplerOptions
 
-from tqdm.autonotebook import tqdm
+from tqdm import tqdm
+
 
 class QueryFunction(Protocol):
     """
@@ -25,6 +26,7 @@ class QueryFunction(Protocol):
     """
     def __call__(self, df: DataFrame) -> DataFrame: ...
 
+
 @dataclass
 class PACOptions:
     """
@@ -36,7 +38,6 @@ class PACOptions:
     """maximum mutual information allowed for the query"""
     c: float = 0.001
     """security parameter, lower bound for noise added"""
-
 
 
 class PACDataFrame:
@@ -77,23 +78,6 @@ class PACDataFrame:
     def withOptions(self, options: PACOptions) -> "PACDataFrame":
         """
         Set the PAC options for the dataframe.
-
-        Example:
-        ```
-        pac_defaulters_df = (PACDataFrame(defaulters)
-                .withOptions(
-                    PACOptions(
-                        trials = 50,
-                        max_mi = 1/8,
-                        c = 1e-6,
-                    )
-                )
-                .withSamplerOptions(
-                    SamplerOptions(
-                        fraction=0.5
-                    )
-                ))
-        ```
         """
         self.options = options
         return self
