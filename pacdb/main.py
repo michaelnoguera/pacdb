@@ -142,7 +142,7 @@ class PACDataFrame:
         if max_mi is None:  # optional argument, otherwise use PACDataFrame setting
             max_mi = self.options.max_mi
 
-        eta: float = 0.05  # convergence threshold  # TODO what should eta be?
+        eta: float = 0.05  # convergence threshold 
 
         # r = max([np.linalg.norm(x) for x in train_x])
 
@@ -153,9 +153,13 @@ class PACDataFrame:
         dimensions = len(self._produce_one_sampled_output())
         proj_matrix: np.ndarray = np.eye(dimensions)
 
+        # TODO: Use the SVD matrix as the projection matrix
+
         if not quiet:
             print(f"max_mi: {max_mi}, eta: {eta}, dimensions: {dimensions}")
-            print("Using the identity matrix as the projection matrix.")
+            print("Hybrid Noise: Using the identity matrix as the projection matrix.")
+        else:
+            print("Anisotropic Noise: Using SVD to find the projection matrix.")
 
         # projected samples used to estimate variance in each basis direction
         # est_y[i] is a list of magnitudes of the outputs in the i-th basis direction
