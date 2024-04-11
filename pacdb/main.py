@@ -120,7 +120,93 @@ class PACDataFrame:
         Y: DataFrame = self._applyQuery(X)
         output: np.ndarray = self._unwrapDataFrame(Y)
         return output
+    
+    @staticmethod
+    def sample_once_static(pacdf: "PACDataFrame") -> np.ndarray:
+        X: DataFrame = pacdf.sampler.sample()
+        Y: DataFrame = pacdf._applyQuery(X)
+        output: np.ndarray = pacdf._unwrapDataFrame(Y)
+        return output
+    
+    @staticmethod
+    def estimate_hybrid_noise_static(
+            sample_once: Callable[["DataFrame"], np.ndarray],
+            max_mi: float = 1./4,
+            anisotropic: bool = False,
+            eta: float = 0.05
+            ) -> List[float]:
         
+
+        # Use the identity matrix for our projection matrix
+        dimensions = len(sample_once())
+        proj_matrix: np.ndarray = np.eye(dimensions)
+
+        samples: List[np.ndarray] = []  # save samples to reuse
+        def sample_and_save() -> np.ndarray:
+            sample = sample_once()
+            samples.append(sample)
+            return sample
+        
+        def reuse_sample() -> np.ndarray:
+            if len(samples) > 0:
+                return samples.pop()
+            else:
+                return sample_once()
+
+        # If no projection matrix is supplied, compute one
+        number_of_samples_for_basis = 5000
+        if anisotropic:
+            outputs = [sample_and_save() for _ in range(number_of_samples_for_basis)]
+            y_cov = np.cov(np.array(outputs).T)
+            
+            u, eigs, u_t = np.linalg.svd(y_cov)
+            proj_matrix = u
+        else:
+            proj_matrix = np.eye(dimensions)
+
+        # projected samples used to estimate variance in each basis direction
+        # est_y[i] is a list of magnitudes of the outputs in the i-th basis direction
+        est_y: List[List[np.ndarray]] = [[] for _ in range(dimensions)]
+        prev_ests: List[Union[float, np.floating[Any]]] = [np.inf for _ in range(dimensions)] # only to measure change per iteration for convergence
+
+        converged = False
+        curr_trial = 0
+
+        while not converged:
+            output: np.ndarray = reuse_sample()
+            assert len(output) == dimensions
+
+            # Compute the magnitude of the output in each of the basis directions, update the estimate lists
+            for i in range(len(output)):
+                if not anisotropic:
+                    est_y[i].append(np.matmul(proj_matrix[i].T, output.T)) # transform back to original basis before storing?
+                else:
+                    est_y[i].append(output[i])
+
+            # Every 10 trials, check for convergence
+            if curr_trial % 10 == 0:
+                # If all dimensions' variance estimates changed by less than eta, we have converged
+                if all(abs(np.var(est_y[i]) - prev_ests[i]) <= eta for i in range(dimensions)):
+                    converged = True
+                else:
+                    # we have not converged, so update the previous estimates and continue
+                    prev_ests = [np.var(est_y[i]) for i in range(dimensions)]
+            curr_trial += 1
+
+        # Now that we have converged, get the variance in each basis direction
+        fin_var: List[np.floating[Any]] = [np.var(est_y[i]) for i in range(dimensions)]
+        # and the mean in each basis direction
+        fin_mean: List[np.floating[Any]] = [np.mean(est_y[i]) for i in range(dimensions)]
+
+        sqrt_total_var = sum(fin_var)**0.5
+
+        noise: List[float] = [np.inf for _ in range(dimensions)]
+        for i in range(dimensions):
+            noise[i] = 1./max_mi**0.5 * fin_var[i]**0.5 * sqrt_total_var
+
+        return noise, [sqrt_total_var, fin_var, fin_mean]
+    
+
     def _estimate_hybrid_noise(
         self,
         max_mi: Optional[float] = None,
