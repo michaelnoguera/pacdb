@@ -115,8 +115,8 @@ class PACDataFrame:
     ### PAC algorithm ###
 
     def _produce_one_sampled_output(self) -> np.ndarray:
-        X: DataFrame = self.sampler.sample()
-        Y: DataFrame = self._applyQuery(X)
+        X: DataFrame = self.sampler.sample() # samples using pyspark sample
+        Y: DataFrame = self._applyQuery(X) # sets query parameter
         output: np.ndarray = self._unwrapDataFrame(Y)
         return output
         
@@ -144,16 +144,18 @@ class PACDataFrame:
 
         eta: float = 0.05  # convergence threshold 
 
-        # r = max([np.linalg.norm(x) for x in train_x])
-
-        # We do not need to create a new set of ordered keys to 'canonicalize' the data, because
-        # the data is already in a consistent column order.
-
         # Use the identity matrix for our projection matrix
         dimensions = len(self._produce_one_sampled_output())
-        proj_matrix: np.ndarray = np.eye(dimensions)
+        proj_matrix: np.ndarray = np.eye(dimensions) # just creates a diagonal matrix
+
+        print(f"chai_debug: The identity matrix dimensions are : {dimensions}")
 
         # TODO: Use the SVD matrix as the projection matrix
+        # Steps seem to be - run mechanism for n(=5000) trials, find outputs, use following -
+        # y_cov = np.cov(np.array(outputs).T)
+        
+        # u, eigs, u_t = np.linalg.svd(y_cov)
+        # proj_matrix = u
 
         if not quiet:
             print(f"max_mi: {max_mi}, eta: {eta}, dimensions: {dimensions}")
@@ -161,10 +163,14 @@ class PACDataFrame:
         else:
             print("Anisotropic Noise: Using SVD to find the projection matrix.")
 
+        # where did this come from hmm
         # projected samples used to estimate variance in each basis direction
         # est_y[i] is a list of magnitudes of the outputs in the i-th basis direction
-        est_y: List[List[np.ndarray]] = [[] for _ in range(dimensions)]
-        prev_ests: List[np.floating[Any]] = [np.inf for _ in range(dimensions)] # to measure change per iteration for convergence
+        # est_y: List[List[np.ndarray]] = [[] for _ in range(dimensions)]
+        # prev_ests: List[np.floating[Any]] = [np.inf for _ in range(dimensions)] # to measure change per iteration for convergence
+
+        est_y = {}
+        prev_ests = None
 
         converged = False
         curr_trial = 0
@@ -173,45 +179,76 @@ class PACDataFrame:
             progress = tqdm()
 
         while not converged:
+            # Step 1: sample
+            # Step 2: get output
+            # Step 3: update estimate lists
+            # Step 4: Every 10 trials, Check for convergence
             output: np.ndarray = self._produce_one_sampled_output()
             assert len(output) == dimensions
 
             # Compute the magnitude of the output in each of the basis directions, update the estimate lists
-            for i in range(len(output)):
-                est_y[i].append(np.matmul(proj_matrix[i].T, output.T))
+            # for i in range(len(output)):
+            #     est_y[i].append(np.matmul(proj_matrix[i].T, output.T))
+
+            for ind in range(len(output)):
+                if ind not in est_y:
+                    est_y[ind] = []
+                est_y[ind].append(np.matmul(proj_matrix[ind].T, np.array(output).T))
 
             # Every 10 trials, check for convergence
             if curr_trial % 10 == 0:
-                if not quiet:
-                    loss = sum(abs(np.var(est_y[i]) - prev_ests[i]) for i in range(dimensions))
-                    target = eta * dimensions
-                    progress.update(10)
-                    progress.set_postfix({"loss": loss, "target": target})
-
-                # If all dimensions' variance estimates changed by less than eta, we have converged
-                if all(abs(np.var(est_y[i]) - prev_ests[i]) <= eta for i in range(dimensions)):
-                    converged = True
+                if prev_ests is None:
+                    prev_ests = {}
+                    for ind in est_y:
+                        prev_ests[ind] = np.var(est_y[ind])
                 else:
-                    # we have not converged, so update the previous estimates and continue
-                    prev_ests = [np.var(est_y[i]) for i in range(dimensions)]
+                    converged = True
+                    for ind in est_y:
+                        if abs(np.var(est_y[ind]) - prev_ests[ind]) > eta:
+                            converged = False
+                    if not converged:
+                        for ind in est_y:
+                            prev_ests[ind] = np.var(est_y[ind])
+
+                # if not quiet:
+                #     loss = sum(abs(np.var(est_y[i]) - prev_ests[i]) for i in range(dimensions))
+                #     target = eta * dimensions
+                #     progress.update(10)
+                #     progress.set_postfix({"loss": loss, "target": target})
+
+                # # If all dimensions' variance estimates changed by less than eta, we have converged
+                # if all(abs(np.var(est_y[i]) - prev_ests[i]) <= eta for i in range(dimensions)):
+                #     converged = True
+                # else:
+                #     # we have not converged, so update the previous estimates and continue
+                #     prev_ests = [np.var(est_y[i]) for i in range(dimensions)]
             curr_trial += 1
 
         # Now that we have converged, get the variance in each basis direction
-        fin_var: List[np.floating[Any]] = [np.var(est_y[i]) for i in range(dimensions)]
+        # fin_var: List[np.floating[Any]] = [np.var(est_y[i]) for i in range(dimensions)]
 
-        if not quiet:
-            progress.close()
-            print(f"Converged after {curr_trial} trials")
-            print(f"Final variance estimates: {fin_var}")
+        # if not quiet:
+        #     progress.close()
+        #     print(f"Converged after {curr_trial} trials")
+        #     print(f"Final variance estimates: {fin_var}")
 
-        sqrt_total_var = sum(fin_var)**0.5
-        print(f'sqrt total var is {sqrt_total_var}')
+        # sqrt_total_var = sum(fin_var)**0.5
+        
+        fin_var = {ind: np.var(est_y[ind]) for ind in est_y}
 
-        noise: List[float] = [np.inf for _ in range(dimensions)]
-        for i in range(dimensions):
-            noise[i] = 1./max_mi**0.5 * fin_var[i]**0.5 * sqrt_total_var
+        noise = {}
+        sqrt_total_var = sum(fin_var.values())**0.5
 
-        print(f'Computed noise (variances) is {noise}')
+        print(f'chai_debug: for MI = {max_mi} sqrt total var is {sqrt_total_var}')
+        for ind in fin_var:
+            noise[ind] = 1./max_mi**0.5 * fin_var[ind]**0.5 * sqrt_total_var
+
+        # noise: List[float] = [np.inf for _ in range(dimensions)]
+        # for i in range(dimensions):
+        #     # what is this??!
+        #     noise[i] = 1./max_mi**0.5 * fin_var[i]**0.5 * sqrt_total_var
+
+        # print(f'Computed noise (variances) is {noise}')
 
         return noise
 
@@ -243,15 +280,15 @@ class PACDataFrame:
 
         noise: List[float] = self._estimate_hybrid_noise()
 
-        noised_output: np.ndarray = self._add_noise(output, noise, quiet=quiet)
+        # noised_output: np.ndarray = self._add_noise(output, noise, quiet=quiet)
 
-        output_df = self._updateDataFrame(noised_output, Y)
+        # output_df = self._updateDataFrame(noised_output, Y)
 
-        if not quiet:
-            print("Inserting to dataframe:")
-            output_df.show()
+        # if not quiet:
+        #     print("Inserting to dataframe:")
+        #     output_df.show()
         
-        return output_df
+        return noise
 
 
     ### Query methods ###
