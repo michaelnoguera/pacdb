@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, List, Optional
+from typing import Any, Callable, List, Optional, Union
 from typing_extensions import Protocol
 
 import numpy as np
@@ -38,7 +38,8 @@ class PACOptions:
     """maximum mutual information allowed for the query"""
     c: float = 0.001
     """security parameter, lower bound for noise added"""
-
+    anisotropic: bool = False
+    """use anisotropic noise estimation"""
 
 class PACDataFrame:
     """
@@ -123,6 +124,7 @@ class PACDataFrame:
     def _estimate_hybrid_noise(
         self,
         max_mi: Optional[float] = None,
+        anisotropic: Optional[bool] = None,
         quiet: bool = False
         ) -> List[float]:
         """
@@ -131,6 +133,8 @@ class PACDataFrame:
         Parameters:
         max_mi: float, optional
             Maximum mutual information allowed for the query. If not provided, use the PACDataFrame setting.
+        anisotropic: bool, optional
+            Whether to use anisotropic noise estimation. If not provided, use the PACDataFrame setting (default False).
         
         Returns:
         noise: List[float]
@@ -141,6 +145,9 @@ class PACDataFrame:
 
         if max_mi is None:  # optional argument, otherwise use PACDataFrame setting
             max_mi = self.options.max_mi
+
+        if anisotropic is None:
+            anisotropic = self.options.anisotropic
 
         eta: float = 0.05  # convergence threshold  # TODO what should eta be?
 
@@ -153,14 +160,37 @@ class PACDataFrame:
         dimensions = len(self._produce_one_sampled_output())
         proj_matrix: np.ndarray = np.eye(dimensions)
 
+        samples: List[np.ndarray] = []  # save samples to reuse
+        def sample_and_save() -> np.ndarray:
+            sample = self._produce_one_sampled_output()
+            samples.append(sample)
+            return sample
+        
+        def reuse_sample() -> np.ndarray:
+            if len(samples) > 0:
+                return samples.pop()
+            else:
+                return self._produce_one_sampled_output()
+
+        # If no projection matrix is supplied, compute one
+        number_of_samples_for_basis = 5000
+        if anisotropic:
+            outputs = [sample_and_save() for _ in range(number_of_samples_for_basis)]
+            y_cov = np.cov(np.array(outputs).T)
+            
+            u, eigs, u_t = np.linalg.svd(y_cov)
+            proj_matrix = u
+        else:
+            proj_matrix = np.eye(dimensions)
+
         if not quiet:
             print(f"max_mi: {max_mi}, eta: {eta}, dimensions: {dimensions}")
-            print("Using the identity matrix as the projection matrix.")
+            print(proj_matrix)
 
         # projected samples used to estimate variance in each basis direction
         # est_y[i] is a list of magnitudes of the outputs in the i-th basis direction
         est_y: List[List[np.ndarray]] = [[] for _ in range(dimensions)]
-        prev_ests: List[np.floating[Any]] = [np.inf for _ in range(dimensions)] # to measure change per iteration for convergence
+        prev_ests: List[Union[float, np.floating[Any]]] = [np.inf for _ in range(dimensions)] # to measure change per iteration for convergence
 
         converged = False
         curr_trial = 0
@@ -169,12 +199,15 @@ class PACDataFrame:
             progress = tqdm()
 
         while not converged:
-            output: np.ndarray = self._produce_one_sampled_output()
+            output: np.ndarray = reuse_sample()
             assert len(output) == dimensions
 
             # Compute the magnitude of the output in each of the basis directions, update the estimate lists
             for i in range(len(output)):
-                est_y[i].append(np.matmul(proj_matrix[i].T, output.T))
+                if anisotropic:
+                    est_y[i].append(np.matmul(proj_matrix[i].T, output.T))
+                else:
+                    est_y[i].append(output[i])
 
             # Every 10 trials, check for convergence
             if curr_trial % 10 == 0:
