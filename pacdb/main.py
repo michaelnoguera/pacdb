@@ -296,20 +296,22 @@ class PACDataFrame:
         """
         Directly apply the query to the given dataframe and return the exact output. This is not private at all!
         """
-        if self.query is None:
-            raise AttributeError("No query set. Use withQuery() to set the query function.")
+        # if self.query is None:
+        #     raise AttributeError("No query set. Use withQuery() to set the query function.")
         
-        query: QueryFunction = self.query
+        # query: QueryFunction = self.query
 
-        if not isinstance(df, DataFrame):  # runtime type check
-            raise ValueError("Input to query function must be a PySpark DataFrame")
+        # if not isinstance(df, DataFrame):  # runtime type check
+        #     raise ValueError("Input to query function must be a PySpark DataFrame")
         
-        y: DataFrame = query(df)
+        # y: DataFrame = query(df)
         
-        if not isinstance(y, DataFrame):  # runtime type check
-            raise ValueError("Output of query function must be a PySpark DataFrame")
+        # if not isinstance(y, DataFrame):  # runtime type check
+        #     raise ValueError("Output of query function must be a PySpark DataFrame")
         
-        return self.query(df)
+        # return self.query(df)
+
+        return df.transform(self.query)
     
     @staticmethod
     def _unwrapDataFrame(df: DataFrame) -> np.ndarray:
@@ -321,7 +323,7 @@ class PACDataFrame:
         # Filter to only numeric columns and coerce to numpy array
         numeric_columns: List[str] = [f.name for f in df.schema.fields if isinstance(f.dataType, T.NumericType)]
         df_numeric: DataFrame = df.select(*numeric_columns)  # select only numeric columns
-        np_array: np.ndarray = np.array(df_numeric.collect())
+        np_array: np.ndarray = df_numeric.pandas_api().to_numpy()
 
         # Flatten the numpy array column-wise
         flat: np.ndarray = np_array.flatten(order="F")
@@ -337,7 +339,7 @@ class PACDataFrame:
         # Recompute shape and columns
         numeric_columns: List[str] = [f.name for f in df.schema.fields if isinstance(f.dataType, T.NumericType)]
         df_numeric: DataFrame = df.select(*numeric_columns)  # select only numeric columns
-        shape = np.array(df_numeric.collect()).shape
+        shape = df_numeric.pandas_api().to_numpy().shape
 
         # -> 2D
         np_array = vec.reshape(shape, order="F")
