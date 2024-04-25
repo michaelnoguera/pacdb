@@ -164,8 +164,8 @@ class PACDataFrame:
 
             # Compute the magnitude of the output in each of the basis directions, update the estimate lists
             for i in range(len(output)):
-                if not anisotropic:
-                    est_y[i].append(np.matmul(proj_matrix[i].T, output.T)) # transform back to original basis before storing?
+                if anisotropic:
+                    est_y[i].append(np.matmul(proj_matrix[i].T, output.T)) # transform back to original basis before storing
                 else:
                     est_y[i].append(output[i])
 
@@ -188,7 +188,7 @@ class PACDataFrame:
 
         noise: List[float] = [np.inf for _ in range(dimensions)]
         for i in range(dimensions):
-            noise[i] = 1./max_mi**0.5 * fin_var[i]**0.5 * sqrt_total_var
+            noise[i] = float(1./(2*max_mi) * fin_var[i]**0.5 * sqrt_total_var)
 
         return noise, [sqrt_total_var, fin_var, fin_mean]
     
