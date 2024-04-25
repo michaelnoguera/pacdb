@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Callable, List, Optional, Union
+from typing import Any, Callable, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -120,7 +120,7 @@ class PACDataFrame:
             max_mi: float = 1./4,
             anisotropic: bool = False,
             eta: float = 0.05
-            ) -> List[float]:
+            ) -> Tuple[List[float], List[Any]]:
         
 
         # Use the identity matrix for our projection matrix
