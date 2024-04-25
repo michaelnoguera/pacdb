@@ -271,22 +271,8 @@ class PACDataFrame:
         """
         Directly apply the query to the given dataframe and return the exact output. This is not private at all!
         """
-        # if self.query is None:
-        #     raise AttributeError("No query set. Use withQuery() to set the query function.")
-        
-        # query: QueryFunction = self.query
 
-        # if not isinstance(df, DataFrame):  # runtime type check
-        #     raise ValueError("Input to query function must be a PySpark DataFrame")
-        
-        # y: DataFrame = query(df)
-        
-        # if not isinstance(y, DataFrame):  # runtime type check
-        #     raise ValueError("Output of query function must be a PySpark DataFrame")
-        
-        # return self.query(df)
-
-        return df.transform(self.query)
+        return df.transform(self.query)  # type: ignore[arg-type]
     
     @staticmethod
     def _unwrapDataFrame(df: DataFrame) -> np.ndarray:
