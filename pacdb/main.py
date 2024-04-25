@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from typing import Any, Callable, List, Optional, Union
-from typing_extensions import Protocol
 
 import numpy as np
 
@@ -12,19 +11,6 @@ from .sampler import DataFrameSampler, SamplerOptions
 
 from tqdm import tqdm
 
-
-class QueryFunction(Protocol):
-    """
-    Any function that takes as input a `pyspark.sql.DataFrame` and returns a
-    `pyspark.sql.DataFrame`.
-
-    Example:
-    ```
-    def query(df):
-        return df.filter(df["absences"] >= 5).agg(F.count("*"))
-    ```
-    """
-    def __call__(self, df: DataFrame) -> DataFrame: ...
 
 
 @dataclass
@@ -67,7 +53,7 @@ class PACDataFrame:
         self.df = df
         self.sampler: DataFrameSampler = DataFrameSampler(self.df)
         self.options = PACOptions()
-        self.query: QueryFunction | None = None  # set by withQuery
+        self.query: Callable[..., DataFrame] | None = None  # set by withQuery
 
     @classmethod
     def fromDataFrame(cls, df: DataFrame) -> "PACDataFrame":
@@ -371,7 +357,7 @@ class PACDataFrame:
 
     ### Query methods ###
 
-    def withQuery(self, query_function: QueryFunction) -> "PACDataFrame":
+    def withQuery(self, query_function: Callable[..., DataFrame]) -> "PACDataFrame":
         """
         Set the query function to be made private.
         """
