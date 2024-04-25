@@ -2,9 +2,12 @@ from dataclasses import dataclass
 from typing import Any, Callable, List, Optional, Tuple, Union
 
 import numpy as np
+import pyspark.mllib.linalg.distributed
 import pyspark.pandas as ps
 import pyspark.sql.types as T
+from pyspark import RDD, SparkContext
 from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.linalg import DenseMatrix, DenseVector, Vectors
 from pyspark.sql import DataFrame
 
 from .sampler import DataFrameSampler, SamplerOptions
@@ -98,22 +101,22 @@ class PACDataFrame:
 
     ### PAC algorithm ###
 
-    def _produce_one_sampled_output(self) -> np.ndarray:
+    def _produce_one_sampled_output(self) -> DenseVector:
         X: DataFrame = self.sampler.sample()
         Y: DataFrame = self._applyQuery(X)
-        output: np.ndarray = self._unwrapDataFrame(Y)
+        output: DenseVector = self._unwrapDataFrame(Y)
         return output
     
     @staticmethod
-    def sample_once_static(pacdf: "PACDataFrame") -> np.ndarray:
+    def sample_once_static(pacdf: "PACDataFrame") -> DenseVector:
         X: DataFrame = pacdf.sampler.sample()
         Y: DataFrame = pacdf._applyQuery(X)
-        output: np.ndarray = pacdf._unwrapDataFrame(Y)
+        output: DenseVector = pacdf._unwrapDataFrame(Y)
         return output
     
     @staticmethod
     def estimate_hybrid_noise_static(
-            sample_once: Callable[[], np.ndarray],
+            sample_once: Callable[[], DenseVector],
             max_mi: float = 1./4,
             anisotropic: bool = False,
             eta: float = 0.05
@@ -127,15 +130,25 @@ class PACDataFrame:
         # If no projection matrix is supplied, compute one
         BASIS_SAMPLES = 500
         if anisotropic:
+            sc = SparkContext.getOrCreate()
+
             # 1. COLLECT SAMPLES
-            outputs: List[np.ndarray] = [sample_once() for _ in range(BASIS_SAMPLES)]
+            outputs: RDD[DenseVector] = sc.parallelize(
+                [sample_once() for _ in range(BASIS_SAMPLES)]
+            )
 
             # 2. COVARIANCE MATRIX
-            y_cov: np.ndarray = np.atleast_2d(np.cov(np.array(outputs).T))
+            mat: pyspark.mllib.linalg.distributed.RowMatrix = pyspark.mllib.linalg.distributed.RowMatrix(outputs.map(lambda x: (x,)))  # type: ignore[arg-type, return-value]
+            y_cov: pyspark.mllib.linalg.Matrix = mat.computeCovariance()
+            y_cov_T: np.ndarray = y_cov.toArray().T
 
             # 3. PROJECTION MATRIX (from SVD of covariance matrix)
-            u, eigs, u_t = np.linalg.svd(y_cov)
-            proj_matrix = u
+            y_cov_rdd = sc.parallelize(y_cov_T)
+            y_cov_distmatrix = pyspark.mllib.linalg.distributed.RowMatrix(y_cov_rdd)
+            svd: pyspark.mllib.linalg.distributed.SingularValueDecomposition = y_cov_distmatrix.computeSVD(y_cov_distmatrix.numCols(), computeU=False)
+            V: DenseMatrix = svd.V
+
+            proj_matrix = V.toArray().T
         else:
             proj_matrix = np.eye(dimensions)
 
@@ -148,7 +161,7 @@ class PACDataFrame:
         curr_trial = 0
 
         while not converged:
-            output: np.ndarray = sample_once()
+            output: np.ndarray = sample_once().toArray()
             assert len(output) == dimensions
 
             # Compute the magnitude of the output in each of the basis directions, update the estimate lists
@@ -238,18 +251,18 @@ class PACDataFrame:
         
         X: DataFrame = self.sampler.sample()
         Y: DataFrame = self._applyQuery(X) 
-        output: np.ndarray = self._unwrapDataFrame(Y)
+        output: np.ndarray = self._unwrapDataFrame(Y).toArray()
 
         if not quiet:
             print("Found output format of query: ")
             zeroes: np.ndarray = np.zeros(output.shape)
-            self._updateDataFrame(zeroes, Y).show()
+            self._updateDataFrame(Vectors.dense(zeroes), Y).show()
 
         noise: List[float] = self._estimate_hybrid_noise()
 
         noised_output: np.ndarray = self._add_noise(output, noise, quiet=quiet)
 
-        output_df = self._updateDataFrame(noised_output, Y)
+        output_df = self._updateDataFrame(Vectors.dense(noised_output), Y)
 
         if not quiet:
             print("Inserting to dataframe:")
@@ -275,7 +288,7 @@ class PACDataFrame:
         return df.transform(self.query)  # type: ignore[arg-type]
     
     @staticmethod
-    def _unwrapDataFrame(df: DataFrame) -> np.ndarray:
+    def _unwrapDataFrame(df: DataFrame) -> DenseVector:
         """
         Convert a PySpark DataFrame into a numpy vector.
         This is the same as "canonicalizing" the data as described in the PAC-ML paper.
@@ -286,10 +299,10 @@ class PACDataFrame:
         assembler = VectorAssembler(inputCols=numeric_columns, outputCol="features", handleInvalid="error")
         df_vector = assembler.transform(df).select("features").rdd.flatMap(lambda x: x.features)
 
-        return np.array(df_vector.collect())
+        return Vectors.dense(df_vector.collect())
 
     @staticmethod
-    def _updateDataFrame(vec: np.ndarray, df: DataFrame) -> DataFrame:
+    def _updateDataFrame(vec: DenseVector, df: DataFrame) -> DataFrame:
         """
         Use the values of the vector to update the PySpark DataFrame.
         """
@@ -299,7 +312,7 @@ class PACDataFrame:
         shape = (df.count(), len(numeric_columns))
         
         # Convert flat-mapped array to an array of rows
-        np_array = np.reshape(vec, shape)
+        np_array = np.reshape(vec.toArray(), shape)
 
         # -> Pandas-On-Spark (attach column labels)
         new_pandas: ps.DataFrame = ps.DataFrame(np_array, columns=numeric_columns)
