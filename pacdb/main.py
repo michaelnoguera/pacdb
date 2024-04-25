@@ -2,15 +2,12 @@ from dataclasses import dataclass
 from typing import Any, Callable, List, Optional, Tuple, Union
 
 import numpy as np
-
-from pyspark.sql import DataFrame, Column
-import pyspark.sql.types as T
 import pyspark.pandas as ps
+import pyspark.sql.types as T
+from pyspark.ml.feature import VectorAssembler
+from pyspark.sql import DataFrame
 
 from .sampler import DataFrameSampler, SamplerOptions
-
-from tqdm import tqdm
-
 
 
 @dataclass
@@ -306,29 +303,25 @@ class PACDataFrame:
         This is the same as "canonicalizing" the data as described in the PAC-ML paper.
         """
         
-        # Filter to only numeric columns and coerce to numpy array
         numeric_columns: List[str] = [f.name for f in df.schema.fields if isinstance(f.dataType, T.NumericType)]
-        df_numeric: DataFrame = df.select(*numeric_columns)  # select only numeric columns
-        np_array: np.ndarray = df_numeric.pandas_api().to_numpy()
 
-        # Flatten the numpy array column-wise
-        flat: np.ndarray = np_array.flatten(order="F")
+        assembler = VectorAssembler(inputCols=numeric_columns, outputCol="features", handleInvalid="error")
+        df_vector = assembler.transform(df).select("features").rdd.flatMap(lambda x: x.features)
 
-        return flat
+        return np.array(df_vector.collect())
 
     @staticmethod
     def _updateDataFrame(vec: np.ndarray, df: DataFrame) -> DataFrame:
         """
-        Use the values of the numpy vector to update the PySpark DataFrame.
+        Use the values of the vector to update the PySpark DataFrame.
         """
 
         # Recompute shape and columns
         numeric_columns: List[str] = [f.name for f in df.schema.fields if isinstance(f.dataType, T.NumericType)]
-        df_numeric: DataFrame = df.select(*numeric_columns)  # select only numeric columns
-        shape = df_numeric.pandas_api().to_numpy().shape
-
-        # -> 2D
-        np_array = vec.reshape(shape, order="F")
+        shape = (df.count(), len(numeric_columns))
+        
+        # Convert flat-mapped array to an array of rows
+        np_array = np.reshape(vec, shape)
 
         # -> Pandas-On-Spark (attach column labels)
         new_pandas: ps.DataFrame = ps.DataFrame(np_array, columns=numeric_columns)
