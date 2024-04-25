@@ -113,7 +113,7 @@ class PACDataFrame:
     
     @staticmethod
     def estimate_hybrid_noise_static(
-            sample_once: Callable[["DataFrame"], np.ndarray],
+            sample_once: Callable[[], np.ndarray],
             max_mi: float = 1./4,
             anisotropic: bool = False,
             eta: float = 0.05
@@ -124,24 +124,16 @@ class PACDataFrame:
         dimensions = len(sample_once())
         proj_matrix: np.ndarray = np.eye(dimensions)
 
-        samples: List[np.ndarray] = []  # save samples to reuse
-        def sample_and_save() -> np.ndarray:
-            sample = sample_once()
-            samples.append(sample)
-            return sample
-        
-        def reuse_sample() -> np.ndarray:
-            if len(samples) > 0:
-                return samples.pop()
-            else:
-                return sample_once()
-
         # If no projection matrix is supplied, compute one
-        number_of_samples_for_basis = 5000
+        BASIS_SAMPLES = 500
         if anisotropic:
-            outputs = [sample_and_save() for _ in range(number_of_samples_for_basis)]
-            y_cov = np.cov(np.array(outputs).T)
-            
+            # 1. COLLECT SAMPLES
+            outputs: List[np.ndarray] = [sample_once() for _ in range(BASIS_SAMPLES)]
+
+            # 2. COVARIANCE MATRIX
+            y_cov: np.ndarray = np.atleast_2d(np.cov(np.array(outputs).T))
+
+            # 3. PROJECTION MATRIX (from SVD of covariance matrix)
             u, eigs, u_t = np.linalg.svd(y_cov)
             proj_matrix = u
         else:
@@ -156,7 +148,7 @@ class PACDataFrame:
         curr_trial = 0
 
         while not converged:
-            output: np.ndarray = reuse_sample()
+            output: np.ndarray = sample_once()
             assert len(output) == dimensions
 
             # Compute the magnitude of the output in each of the basis directions, update the estimate lists
@@ -250,7 +242,7 @@ class PACDataFrame:
 
         if not quiet:
             print("Found output format of query: ")
-            zeroes = np.zeros(output.shape)
+            zeroes: np.ndarray = np.zeros(output.shape)
             self._updateDataFrame(zeroes, Y).show()
 
         noise: List[float] = self._estimate_hybrid_noise()
