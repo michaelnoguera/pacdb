@@ -223,98 +223,12 @@ class PACDataFrame:
 
         eta: float = 0.05  # convergence threshold  # TODO what should eta be?
 
-        # r = max([np.linalg.norm(x) for x in train_x])
-
-        # We do not need to create a new set of ordered keys to 'canonicalize' the data, because
-        # the data is already in a consistent column order.
-
-        # Use the identity matrix for our projection matrix
-        dimensions = len(self._produce_one_sampled_output())
-        proj_matrix: np.ndarray = np.eye(dimensions)
-
-        samples: List[np.ndarray] = []  # save samples to reuse
-        def sample_and_save() -> np.ndarray:
-            sample = self._produce_one_sampled_output()
-            samples.append(sample)
-            return sample
-        
-        def reuse_sample() -> np.ndarray:
-            if len(samples) > 0:
-                return samples.pop()
-            else:
-                return self._produce_one_sampled_output()
-
-        # If no projection matrix is supplied, compute one
-        number_of_samples_for_basis = 5000
-        if anisotropic:
-            outputs = [sample_and_save() for _ in range(number_of_samples_for_basis)]
-            y_cov = np.cov(np.array(outputs).T)
-            
-            u, eigs, u_t = np.linalg.svd(y_cov)
-            proj_matrix = u
-        else:
-            proj_matrix = np.eye(dimensions)
-
-        if not quiet:
-            print(f"max_mi: {max_mi}, eta: {eta}, dimensions: {dimensions}")
-            print(proj_matrix)
-
-        # projected samples used to estimate variance in each basis direction
-        # est_y[i] is a list of magnitudes of the outputs in the i-th basis direction
-        est_y: List[List[np.ndarray]] = [[] for _ in range(dimensions)]
-        prev_ests: List[Union[float, np.floating[Any]]] = [np.inf for _ in range(dimensions)] # to measure change per iteration for convergence
-
-        converged = False
-        curr_trial = 0
-
-        if not quiet:
-            progress = tqdm()
-
-        while not converged:
-            output: np.ndarray = reuse_sample()
-            assert len(output) == dimensions
-
-            # Compute the magnitude of the output in each of the basis directions, update the estimate lists
-            for i in range(len(output)):
-                if anisotropic:
-                    est_y[i].append(np.matmul(proj_matrix[i].T, output.T))
-                else:
-                    est_y[i].append(output[i])
-
-            # Every 10 trials, check for convergence
-            if curr_trial % 10 == 0:
-                if not quiet:
-                    loss = sum(abs(np.var(est_y[i]) - prev_ests[i]) for i in range(dimensions))
-                    target = eta * dimensions
-                    progress.update(10)
-                    progress.set_postfix({"loss": loss, "target": target})
-
-                # If all dimensions' variance estimates changed by less than eta, we have converged
-                if all(abs(np.var(est_y[i]) - prev_ests[i]) <= eta for i in range(dimensions)):
-                    converged = True
-                else:
-                    # we have not converged, so update the previous estimates and continue
-                    prev_ests = [np.var(est_y[i]) for i in range(dimensions)]
-            curr_trial += 1
-
-        # Now that we have converged, get the variance in each basis direction
-        fin_var: List[np.floating[Any]] = [np.var(est_y[i]) for i in range(dimensions)]
-
-        if not quiet:
-            progress.close()
-            print(f"Converged after {curr_trial} trials")
-            print(f"Final variance estimates: {fin_var}")
-
-        sqrt_total_var = sum(fin_var)**0.5
-        print(f'sqrt total var is {sqrt_total_var}')
-
-        noise: List[float] = [np.inf for _ in range(dimensions)]
-        for i in range(dimensions):
-            noise[i] = 1./max_mi**0.5 * fin_var[i]**0.5 * sqrt_total_var
-
-        print(f'Computed noise (variances) is {noise}')
-
-        return noise
+        return self.estimate_hybrid_noise_static(
+            self._produce_one_sampled_output,
+            max_mi=max_mi,
+            anisotropic=anisotropic,
+            eta=eta)[0]
+    
 
     @staticmethod
     def _add_noise(result: np.ndarray, noise: List[float], quiet=False) -> np.ndarray:
