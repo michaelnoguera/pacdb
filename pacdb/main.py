@@ -179,6 +179,8 @@ class PACDataFrame:
         for i in range(dimensions):
             noise[i] = float(1./(2*max_mi) * fin_var[i]**0.5 * sqrt_total_var)
 
+        #noise = [(float(i) / max_mi) for i in range(dimensions)]  # override whole method for testing downstream code
+
         return noise, [sqrt_total_var, fin_var, fin_mean]
     
 
