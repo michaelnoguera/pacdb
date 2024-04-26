@@ -7,3 +7,5 @@
 .spark
 metastore_db
 derby.log
+
+old/
