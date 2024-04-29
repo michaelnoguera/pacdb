@@ -132,11 +132,10 @@ class PACDataFrame:
 
             # 2. COVARIANCE MATRIX
             y_cov: np.ndarray = np.atleast_2d(np.cov(np.array(outputs).T))
-            y_cov_idx = np.argsort(np.diag(y_cov))[::-1]
 
             # 3. PROJECTION MATRIX (from SVD of covariance matrix)
             u, eigs, u_t = np.linalg.svd(y_cov)
-            proj_matrix = u[y_cov_idx]
+            proj_matrix = u
         else:
             proj_matrix = np.eye(dimensions)
 
@@ -152,12 +151,13 @@ class PACDataFrame:
             output: np.ndarray = sample_once()
             assert len(output) == dimensions
 
+            if anisotropic:
+                # project output into the basis of the proj_matrix
+                output = np.matmul(proj_matrix, output)
+            
             # Compute the magnitude of the output in each of the basis directions, update the estimate lists
             for i in range(len(output)):
-                if anisotropic:
-                    est_y[i].append(np.matmul(proj_matrix[i].T, output.T)) # transform back to original basis before storing
-                else:
-                    est_y[i].append(output[i])
+                est_y[i].append(output[i])
 
             # Every 10 trials, check for convergence
             if curr_trial % 10 == 0:
@@ -176,11 +176,15 @@ class PACDataFrame:
 
         sqrt_total_var = sum(fin_var)**0.5
 
-        noise: List[float] = [np.inf for _ in range(dimensions)]
+        noise: np.ndarray = np.array([np.inf for _ in range(dimensions)])
         for i in range(dimensions):
             noise[i] = float(1./(2*max_mi) * fin_var[i]**0.5 * sqrt_total_var)
 
-        return noise, [sqrt_total_var, fin_var, fin_mean]
+        if anisotropic:
+            # Project noise back to the original basis
+            noise = np.abs(np.matmul(np.linalg.inv(proj_matrix), noise)) # (proj_matrix^-1) FUNCTION((proj_matrix)(input)) = FUNCTION(input)
+
+        return list(noise), [sqrt_total_var, fin_var, fin_mean]
     
 
     def _estimate_hybrid_noise(
