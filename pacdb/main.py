@@ -132,10 +132,11 @@ class PACDataFrame:
 
             # 2. COVARIANCE MATRIX
             y_cov: np.ndarray = np.atleast_2d(np.cov(np.array(outputs).T))
+            y_cov_idx = np.argsort(np.diag(y_cov))[::-1]
 
             # 3. PROJECTION MATRIX (from SVD of covariance matrix)
             u, eigs, u_t = np.linalg.svd(y_cov)
-            proj_matrix = u
+            proj_matrix = u[y_cov_idx]
         else:
             proj_matrix = np.eye(dimensions)
 
@@ -178,8 +179,6 @@ class PACDataFrame:
         noise: List[float] = [np.inf for _ in range(dimensions)]
         for i in range(dimensions):
             noise[i] = float(1./(2*max_mi) * fin_var[i]**0.5 * sqrt_total_var)
-
-        #noise = [(float(i) / max_mi) for i in range(dimensions)]  # override whole method for testing downstream code
 
         return noise, [sqrt_total_var, fin_var, fin_mean]
     
