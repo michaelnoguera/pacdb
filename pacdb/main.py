@@ -174,7 +174,7 @@ class PACDataFrame:
         # and the mean in each basis direction
         fin_mean: List[np.floating[Any]] = [np.mean(est_y[i]) for i in range(dimensions)]
 
-        sqrt_total_var = sum(fin_var)**0.5
+        sqrt_total_var = sum([fin_var[x]**0.5 for x in range(len(fin_var))])
 
         noise: np.ndarray = np.array([np.inf for _ in range(dimensions)])
         for i in range(dimensions):
