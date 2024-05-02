@@ -125,7 +125,7 @@ class PACDataFrame:
         proj_matrix: np.ndarray = np.eye(dimensions)
 
         # If no projection matrix is supplied, compute one
-        BASIS_SAMPLES = 500
+        BASIS_SAMPLES = 10000
         if anisotropic:
             # 1. COLLECT SAMPLES
             outputs: List[np.ndarray] = [sample_once() for _ in range(BASIS_SAMPLES)]
@@ -136,6 +136,7 @@ class PACDataFrame:
             # 3. PROJECTION MATRIX (from SVD of covariance matrix)
             u, eigs, u_t = np.linalg.svd(y_cov)
             proj_matrix = u
+            proj_matrix_inv = u_t
         else:
             proj_matrix = np.eye(dimensions)
 
@@ -182,7 +183,7 @@ class PACDataFrame:
 
         if anisotropic:
             # Project noise back to the original basis
-            noise = np.abs(np.matmul(np.linalg.inv(proj_matrix), noise)) # (proj_matrix^-1) FUNCTION((proj_matrix)(input)) = FUNCTION(input)
+            noise = np.abs(np.matmul(proj_matrix_inv, noise)) # (proj_matrix^-1) FUNCTION((proj_matrix)(input)) = FUNCTION(input)
 
         return list(noise), [sqrt_total_var, fin_var, fin_mean]
     

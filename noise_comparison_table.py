@@ -40,7 +40,7 @@ with open(HYBRID_PATH, "a") as f:
     f.write("mi,noise,sqrt_total_var,variances,mean\n")
 
     try:
-        for _ in range(5):
+        for _ in range(2):
             for mi in budget_list:
                 out = PACDataFrame.estimate_hybrid_noise_static(sample_once=hybrid_sampler.__next__, max_mi=mi, anisotropic=False)
                 f.write(f"{mi},{out[0]},{out[1][0]},{out[1][1]},{out[1][2]}\n")
