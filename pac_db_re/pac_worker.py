@@ -2,15 +2,20 @@
 
 from enum import Enum
 from typing import Any, Callable, List, Tuple, Union
+from pyspark.sql.functions import lit, when, col
+from pyspark.sql import DataFrame, functions as F
 
 import numpy as np
 from pandas import DataFrame
 import pyspark.pandas as ps
 from pyspark.ml.feature import VectorAssembler
+from typing_extensions import Protocol
 
 import pyspark.sql.types as T
+from pyspark.sql import DataFrame, Row
+from pyspark.sql.functions import lit
 
-from pacdb.main import QueryFunction
+# from pacdb.main import QueryFunction
 
 # TODO: incorporate ENUMS
 class AggregationType(Enum):
@@ -26,6 +31,19 @@ and the new inputs you defined
 estimate_noise() - 
 release_value() - 
 """
+
+class QueryFunction(Protocol):
+    """
+    Any function that takes as input a `pyspark.sql.DataFrame` and returns a
+    `pyspark.sql.DataFrame`.
+
+    Example:
+    ```
+    def query(df):
+        return df.filter(df["absences"] >= 5).agg(F.count("*"))
+    ```
+    """
+    def __call__(self, df: DataFrame) -> DataFrame: ...
 
 class PACWorker():
 
@@ -84,7 +102,7 @@ class PACWorker():
         else:
             raise ValueError("Invalid filter_type. Use 'greater_than' or 'lesser_than'.")
 
-    def _add_noise(result: np.ndarray, noise: List[float]) -> np.ndarray:
+    def _add_noise(self, result: np.ndarray, noise: List[float]) -> np.ndarray:
         # noise is an array of variances, one for each dimension of the query result
         noised = []
         for i in range(len(result)):
@@ -113,16 +131,53 @@ class PACWorker():
 
         return np.array(df_vector.collect())
     
+    def _insert_row_at_index(self, df: DataFrame, row: Row, index: int) -> DataFrame:
+        # Split the DataFrame into two parts: before the insertion point and after
+        df_before = df.limit(index)
+        df_after = df.subtract(df_before)
+        
+        new_row_df = df.sql_ctx.createDataFrame([row])
+        
+        result_df = df_before.union(new_row_df).union(df_after)
 
-    def _produce_one_sampled_output(self, df) -> np.ndarray:
-        X: DataFrame = df.sample(withReplacement=self.options.withReplacement, 
-                                                 fraction=self.options.fraction, 
-                                                 seed=self.options.seed)
-        # Chai Debug: add support for filter here (and later join)
-        if self.filter_col:
-            X = self._filter_dataframe(X)
+        return result_df
+    
+    def _account_for_missing_groups(self, sample_output, true_values):
+        for idx in range(len(true_values)):
+            true_value = true_values[idx]
+            # Check if the value exists in the sample DataFrame
+            if sample_output.filter(sample_output[self.group_by_col] == true_value).count() == 0:
+                # Create a new row with the col_name value and all other columns set to 0
+                new_row = {self.group_by_col: true_value}
+                for column in sample_output.columns:
+                    if column != self.group_by_col:
+                        new_row[column] = 0
+                
+                # Insert the new row at the correct index in the sample DataFrame
+                sample_output = self._insert_row_at_index(sample_output, Row(**new_row), idx)
 
+        return sample_output
+    
+
+    def _produce_one_sampled_output(self, 
+                                    dimensions, 
+                                    df=None, 
+                                    true_values=None, 
+                                    sampling_rate=0.5,
+                                    v1=False,
+                                    v2=False) -> np.ndarray:
+        X: DataFrame = df.sample(withReplacement=False, fraction=sampling_rate, seed=None)
+
+        if v1: 
+            # if v1, then we filter and join every time we get a sample before group by agg
+            if self.filter_col:
+                X = self._filter_dataframe(X)
+
+        # if v2, X is the filtered and joined df - use as is
         Y: DataFrame = self._applyQuery(X)
+
+        Y = self._account_for_missing_groups(Y, true_values)
+
         output: np.ndarray = self._unwrapDataFrame(Y)
         return output
 
@@ -130,10 +185,13 @@ class PACWorker():
     # to be used as it is
     def _estimate_hybrid_noise(
             self,
-            sample_once: Callable[[], np.ndarray],
-            max_mi: float = 1./4,
-            eta: float = 0.05,
-            dimensions=None
+            df,
+            max_mi: float = 2,
+            eta: float = 0.1,
+            dimensions=None,
+            true_values=None,
+            v1=False,
+            v2=False
             ) -> Tuple[List[float], List[Any]]:
         
         # Use the identity matrix for our projection matrix
@@ -147,14 +205,13 @@ class PACWorker():
         converged = False
         curr_trial = 0
 
-        while not converged:
-            output: np.ndarray = sample_once()
-            if len(output) == dimensions:
-                print("All groups accounted for!")
-            else: 
-                account_for_missing_groups = True
-                # for every group that is missing, insert a 0
+        account_for_missing_groups = False
 
+        while not converged:
+            output: np.ndarray = self._produce_one_sampled_output(df=df, dimensions=dimensions, true_values=true_values, v1=v1, v2=v2)
+            if len(output) != dimensions:
+                print("All groups not accounted for!")
+                account_for_missing_groups = True
             
             # Compute the magnitude of the output in each of the basis directions, update the estimate lists
             for i in range(len(output)):
@@ -186,53 +243,101 @@ class PACWorker():
     # TODO: what do we want happens in this case
     # before filter if we group by we get 2 true groups
     # after filter, we get 1 true group
+    
+    def _group_by_count(self, df) -> DataFrame:
+        return df.groupBy(self.group_by_col).count()
+    
+    def _check_group_by_count_threshold(self, X, groups_list, noise, threshold_value) -> dict:
+        # get final output, accounting for any missing groups in the final sample
+        intermediate_Y = self._group_by_count(X)
+        intermediate_Y = self._account_for_missing_groups(intermediate_Y, groups_list)
+        output: np.ndarray = self._unwrapDataFrame(intermediate_Y)
 
-    def estimate_noise(self, df, sampling_rate=None): 
-        # TODO: add support for join
+        # add noise to count
+        intermediate_noised_output: np.ndarray = self._add_noise(output, noise)
 
+        intermediate_output_df = self._updateDataFrame(intermediate_noised_output, intermediate_Y)
+        intermediate_output_df.show()
+
+        flag_dict = {}
+        # here check if any group counts are below threshold
+        for ind in range(len(intermediate_noised_output)):
+            noisy_group_count = intermediate_noised_output[ind]
+            if abs(noisy_group_count) < threshold_value:
+                flag_dict[groups_list[ind]] = True
+            else:
+                flag_dict[groups_list[ind]] = False
+
+        return flag_dict
+    
+    def _apply_threshold(self, df, flag_dict):
+        for key, should_update in flag_dict.items():
+            if should_update:
+                # Apply the condition to each column
+                for column in df.columns:
+                    if column != self.group_by_col:
+                        df = df.withColumn(
+                            column,
+                            F.when(F.col(self.group_by_col) == key, 
+                                   F.lit(0)).otherwise(F.col(column))
+                        )
+        return df
+    
+    def estimate_noise(self, 
+                       df, 
+                       sampling_rate=None, 
+                       v1=True, 
+                       v2=False): 
         # get true result to get correct dimensions
         if self.filter_col:
-            df = self._filter_dataframe(df)
+            filtered_df = self._filter_dataframe(df)
 
-        Y: DataFrame = self._applyQuery(df)
+        # TODO: add support for join
+        filtered_and_joined_df = filtered_df
+
+        Y: DataFrame = self._applyQuery(filtered_and_joined_df)
+        groups_list = [row[self.group_by_col] for row in Y.select(self.group_by_col).collect()]
         output: np.ndarray = self._unwrapDataFrame(Y)
 
         zeroes: np.ndarray = np.zeros(output.shape)
         self._updateDataFrame(zeroes, Y).show()
 
-        noise: List[float] = self._estimate_hybrid_noise(sample_once=self._produce_one_sampled_output(df), 
-                                                         dimensions=len(zeroes))[0]
+        # whether v1 or v2, only changes how the sampling efficiency is improved
+        if v1:
+            noise: List[float] = self._estimate_hybrid_noise(df=df, dimensions=len(zeroes), true_values=groups_list, v1=True)[0]
+        if v2:
+            noise: List[float] = self._estimate_hybrid_noise(df=filtered_and_joined_df, dimensions=len(zeroes), true_values=groups_list, v2=True)[0]
 
-        return noise
+        return noise, groups_list
     
-    def release_pac_value(self, df, threshold, threshold_value, sampling_rate, noise):
+    def release_pac_value(self, 
+                          df, 
+                          groups_list, 
+                          threshold_value, 
+                          noise, 
+                          sampling_rate=0.5):
+        # get final sample
         X: DataFrame = df.sample(withReplacement=False, fraction=sampling_rate, seed=None)
+        if self.filter_col:
+            X = self._filter_dataframe(X)
 
-        # apply query -
-        # first filter
-        # then join
-        # then group by count
-        Y: DataFrame
-        output: np.ndarray
-
-        # add noise to count
-        intermediate_noised_output: np.ndarray = self._add_noise(output, noise)
-        # here check if any group counts are below threshold
-        # if yes,
-            # flag the group
+        flag_dict = self._check_group_by_count_threshold(X, groups_list, noise, threshold_value)
         
-        # apply query again -
-        # this time group by actual agg type
-        Y: DataFrame
-        output: np.ndarray
-        # if the group is flagged, make its result 0
-
+        # apply query again - this time group by actual agg type
+        Y: DataFrame = self._applyQuery(X)
+        Y = self._account_for_missing_groups(Y, groups_list)
+        output: np.ndarray = self._unwrapDataFrame(Y)
         noised_output: np.ndarray = self._add_noise(output, noise)
 
         output_df = self._updateDataFrame(noised_output, Y)
         output_df.show()
 
+        output_df = self._apply_threshold(df=output_df, flag_dict=flag_dict)
+        output_df.show()
 
+        
+    
+    
 
 
 
@@ -280,3 +385,17 @@ class PACWorker():
 
 
 
+"""
+Y_dict = {row[self.group_by_col]: row['count'] for row in intermediate_Y.collect()}
+
+        for i, group in true_groups:
+            if group in Y_dict:
+                print('Group present in sample!')
+            else:
+                items = list(Y_dict.items())
+                # Insert the new item at the specified index
+                items.insert(i, (group, 0))
+                Y_dict = dict(items)
+
+            i += 1
+"""
