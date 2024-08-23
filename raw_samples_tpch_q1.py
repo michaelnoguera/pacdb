@@ -1,6 +1,5 @@
 """
-Generate raw samples for the student absences by guardian count query. Outputs are saved
-to raw_samples_count.csv.
+Generate raw samples for TPC-H Q1. Outputs are saved to raw_samples_tpch_q1.csv.
 """
 
 from typing import List
