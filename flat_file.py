@@ -125,13 +125,35 @@ for o in out:
 
     o.show()
 
-
-### Count thresholding based on noisy count computed using hybrid DP noise
+### Count thresholding
 # If the number of rows from the original table contributing to any of the groups is smaller than the threshold, we omit the group
 COUNT_THRESHOLD = 10
 
-# TODO
+# *********************Hybrid-DP Noise******************************
 
+# Step 1: Check group
+group_by_count = df3.groupBy("l_returnflag", "l_linestatus").count()
+
+# Step 2: Add DP-noise to each group
+# TODO: How to convert MI to epsilon? 
+epsilon = 0.5
+sensitivity = 1 # since we are calculating count, sensitivity is 1
+scale = sensitivity / epsilon
+noise = np.random.laplace(0, scale, 1)[0]
+
+noisy_group_by_count = group_by_count + noise
+
+# Step 3: Check if noisy_group_by_count is less than threshold -- this is the algorithm
+# flags = []
+# i = 0
+# for noisy_group in noisy_group_by_count:
+#     if noisy_group < COUNT_THRESHOLD:
+#         flags[i] = 1
+#     i += 1
+
+# Step 4: Continue with adding PAC noise - at the very end, check if the PAC-noised-group was flagged using index i -- if yes, make the value 0
+    
+# *********************Hybrid-DP Noise******************************
 
 ### Convert to Numpy Array for PAC logic
 
