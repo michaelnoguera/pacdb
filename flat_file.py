@@ -125,7 +125,8 @@ for o in out:
 
     o.show()
 
-### Count thresholding
+
+### Count thresholding based on noisy count computed using hybrid DP noise
 # If the number of rows from the original table contributing to any of the groups is smaller than the threshold, we omit the group
 COUNT_THRESHOLD = 10
 

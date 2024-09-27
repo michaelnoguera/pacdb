@@ -1,5 +1,11 @@
+"""
+Generate the TPC-H tables by using the DuckDB tpch plugin.
+Export tables to parquet files saved here for use in experiments.
+"""
+
 import duckdb
 import pyarrow.parquet as pq
+
 con = duckdb.connect(database=':memory:')
 con.execute("INSTALL tpch; LOAD tpch")
 con.execute("CALL dbgen(sf=1)")
