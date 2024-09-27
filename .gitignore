@@ -9,3 +9,5 @@ metastore_db
 derby.log
 
 old/
+
+.envrc

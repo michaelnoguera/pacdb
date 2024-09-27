@@ -139,9 +139,9 @@ group_by_count = df3.groupBy("l_returnflag", "l_linestatus").count()
 epsilon = 0.5
 sensitivity = 1 # since we are calculating count, sensitivity is 1
 scale = sensitivity / epsilon
-noise = np.random.laplace(0, scale, 1)[0]
+dp_noise = np.random.laplace(0, scale, 1)[0]
 
-noisy_group_by_count = group_by_count + noise
+# dp_noisy_group_by_count = group_by_count + dp_noise
 
 # Step 3: Check if noisy_group_by_count is less than threshold -- this is the algorithm
 # flags = []
@@ -194,14 +194,55 @@ fin_mean: List[np.floating[Any]] = [np.mean(est_y[i]) for i in range(dimensions)
 
 sqrt_total_var = sum([fin_var[x]**0.5 for x in range(len(fin_var))])
 
-noise: np.ndarray = np.array([np.inf for _ in range(dimensions)])
+pac_noise: np.ndarray = np.array([np.inf for _ in range(dimensions)])
 for i in range(dimensions):
-    noise[i] = float(1./(2*max_mi) * fin_var[i]**0.5 * sqrt_total_var)
+    pac_noise[i] = float(1./(2*max_mi) * fin_var[i]**0.5 * sqrt_total_var)
 
-noises_to_add = list(noise)
-noises_other_outputs = [sqrt_total_var, fin_var, fin_mean]
+pac_noises_to_add = list(pac_noise)
+pac_noises_other_outputs = [sqrt_total_var, fin_var, fin_mean]
 
-print(noises_to_add)
-print(noises_other_outputs)
+#print(pac_noises_to_add)
+#print(pac_noises_other_outputs)
 
-# TODO not yet working correctly
+# Add noise element-wise to the outputs
+
+def updateDataFrame(vec: np.ndarray, df: DataFrame) -> DataFrame:
+    """
+    Use the values of the vector to update the PySpark DataFrame.
+    """
+
+    # Recompute shape and columns
+    numeric_columns: List[str] = [f.name for f in df.schema.fields if isinstance(f.dataType, T.NumericType)]
+    shape = (df.count(), len(numeric_columns))
+    
+    # Convert flat-mapped array to an array of rows
+    np_array = np.reshape(vec, shape)
+
+    # -> Pandas-On-Spark (attach column labels)
+    new_pandas: ps.DataFrame = ps.DataFrame(np_array, columns=numeric_columns)
+
+    # Merge the new values with the old DataFrame
+    old_pandas: ps.DataFrame = df.pandas_api()
+    old_pandas.update(new_pandas)
+    updated_df: DataFrame = old_pandas.to_spark()
+
+    return updated_df
+
+# Apply the PAC noise to the output
+# use the first sample as the base for the output
+
+true_output = out[0]
+true_output_np = out_np[0]
+
+pac_noises_to_add_np = np.array(pac_noises_to_add)
+
+# Add PAC noise to the output, element wise addition of numpy arrays
+noisy_output_np = true_output_np + pac_noises_to_add_np
+
+# Update the DataFrame with the noisy output
+noisy_output_df = updateDataFrame(noisy_output_np, true_output)
+
+noisy_output_df.show()
+
+# TODO addition of dp noise
+# TODO make the zeroed-out values not have pac noise added if that is what should happen
