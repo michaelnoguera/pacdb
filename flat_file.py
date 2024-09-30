@@ -118,35 +118,6 @@ for o in out:
     # We'll re-sort so that the order of the groups doesn't give anything away.
     o = o.sort("l_returnflag", "l_linestatus")  # TODO generalize
 
-### Count thresholding
-# If the number of rows from the original table contributing to any of the groups is smaller than the threshold, we omit the group
-COUNT_THRESHOLD = 10
-
-# *********************Hybrid-DP Noise******************************
-
-# Step 1: Check group
-group_by_count = df3.groupBy("l_returnflag", "l_linestatus").count()
-
-# Step 2: Add DP-noise to each group
-# TODO: How to convert MI to epsilon? 
-epsilon = 0.5
-sensitivity = 1 # since we are calculating count, sensitivity is 1
-scale = sensitivity / epsilon
-dp_noise = np.random.laplace(0, scale, 1)[0]
-
-# dp_noisy_group_by_count = group_by_count + dp_noise
-
-# Step 3: Check if noisy_group_by_count is less than threshold -- this is the algorithm
-# flags = []
-# i = 0
-# for noisy_group in noisy_group_by_count:
-#     if noisy_group < COUNT_THRESHOLD:
-#         flags[i] = 1
-#     i += 1
-
-# Step 4: Continue with adding PAC noise - at the very end, check if the PAC-noised-group was flagged using index i -- if yes, make the value 0
-    
-# *********************Hybrid-DP Noise******************************
 
 ### Convert to Numpy Array for PAC logic
 
@@ -236,6 +207,38 @@ noisy_output_np = true_output_np + pac_noises_to_add_np
 noisy_output_df = updateDataFrame(noisy_output_np, true_output)
 
 noisy_output_df.show()
+
+
+### Count thresholding
+
+# If the number of rows from the original table contributing to any of the groups is smaller than the threshold, we omit the group
+COUNT_THRESHOLD = 10
+
+# *********************Hybrid-DP Noise******************************
+
+# Step 1: Check group
+group_by_count = df3.groupBy("l_returnflag", "l_linestatus").count()
+
+# Step 2: Add DP-noise to each group
+# TODO: How to convert MI to epsilon? 
+epsilon = 0.5
+sensitivity = 1 # since we are calculating count, sensitivity is 1
+scale = sensitivity / epsilon
+dp_noise = np.random.laplace(0, scale, 1)[0]
+
+# dp_noisy_group_by_count = group_by_count + dp_noise
+
+# Step 3: Check if noisy_group_by_count is less than threshold -- this is the algorithm
+# flags = []
+# i = 0
+# for noisy_group in noisy_group_by_count:
+#     if noisy_group < COUNT_THRESHOLD:
+#         flags[i] = 1
+#     i += 1
+
+# Step 4: Continue with adding PAC noise - at the very end, check if the PAC-noised-group was flagged using index i -- if yes, make the value 0
+    
+# *********************Hybrid-DP Noise******************************
 
 # TODO addition of dp noise
 # TODO make the zeroed-out values not have pac noise added if that is what should happen
