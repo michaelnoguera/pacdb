@@ -121,19 +121,15 @@ df_unsampled_output = (df2
                         .sort("l_returnflag", "l_linestatus")
                     )
 
-# Build a template: Zero out everything but the group-by columns
-df_unsampled_zeroed = df_unsampled_output.select(
+# Build a template: Zero out everything but the group-by keys
+template = df_unsampled_output.select(
     *GROUP_BY_KEYS, # leave grouped-by columns unchanged
     *[F.lit(0).alias(col) for col in df_unsampled_output.columns if col not in GROUP_BY_KEYS] # set all other columns to zeroes
 )
 
-# Here we assume that all output DataFrames have the same schema. If this assumption is not valid, then this line should
-# move inside the loop below (and replace out[0] with o)
-df_unsampled_zeroed = df_unsampled_zeroed.select(out[0].columns)
-
 # Now apply the template to all of the output DataFrames. If a group is missing from the output, it will be added in with 0 values
 for o in out:
-    o = (o.union(df_unsampled_zeroed)  # append the zeroed-out rows to the output
+    o = (o.union(template)  # append the zeroed-out rows to the output
          .groupBy(*GROUP_BY_KEYS)  # deduplicate the output, preferring the original values
          .agg(*[F.first(col).alias(col) for col in o.columns if col not in GROUP_BY_KEYS]))
     
@@ -232,7 +228,7 @@ pac_noises_to_add_np = np.array(pac_noises_to_add)
 noisy_output_np = true_output_np + pac_noises_to_add_np
 
 # Update the DataFrame with the noisy output
-noisy_output_df = updateDataFrame(noisy_output_np, true_output)
+noisy_output_df = updateDataFrame(noisy_output_np, template)
 
 noisy_output_df.show()
 
