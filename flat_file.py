@@ -27,15 +27,10 @@ spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
 
 # Supress warnings about pyspark --> numpy conversion and back
 import warnings
-
 from pyspark.pandas.utils import PandasAPIOnSparkAdviceWarning
-
 warnings.filterwarnings("ignore", category=PandasAPIOnSparkAdviceWarning)
 
 ### Data Setup
-
-math_df: pyspark.sql.DataFrame = spark.read.csv("./data/student_performance/student-mat.csv", header=True, inferSchema=True, sep=";")
-math_df.cache()
 
 # load tpch tables from data/tpch/*.parquet
 # TPCH_TABLE_NAMES = ["customer", "lineitem", "nation", "orders", "part", "partsupp", "region", "supplier"]
