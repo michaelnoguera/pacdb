@@ -42,6 +42,10 @@ tables: Dict[str, DataFrame] = {
 
 ### Query Setup
 
+# Input to query step:
+# 1. tables: Dict[str, DataFrame] - the tables to query
+#  . the query to run (expressed here inline)
+
 df = tables["lineitem"]
 
 # Push down filter all the way
@@ -77,8 +81,26 @@ while len(out) < SAMPLES:
     
     out.append(df4)
 
+# Output of query step:
+# 1. out: List[DataFrame] - results of running the query $SAMPLES times
+# 2. group_by_counts: List[DataFrame] - number of rows contributing to each group in each sample
+
 ### Account for Missing Groups
 # For all outputs, if any groups are missing from the output, add them in with 0 values
+"""                                                         
+ Output of this sample is               Missing groups are added with 
+ missing groups present when            zeroes                        
+ query run on other samples                                           
+┌────────────┬──────┬──────┐            ┌────────────┬──────┬──────┐  
+│group_by_key│ col1 │ col2 │            │group_by_key│ col1 │ col2 │  
+├────────────┼──────┼──────┤            ├────────────┼──────┼──────┤  
+│A           │  •   │  •   │            │A           │  •   │  •   │  
+└────────────┴──────┴──────┘            ├────────────┼──────┼──────┤  
+                              ───────▶  │B           │  0   │  0   │  
+┌────────────┬──────┬──────┐            ├────────────┼──────┼──────┤  
+│C           │  •   │  •   │            │C           │  •   │  •   │  
+└────────────┴──────┴──────┘            └────────────┴──────┴──────┘  
+"""
 
 # First we run the query once without any sampling to get the true output format with all possible groups present
 GROUP_BY_KEYS = ["l_returnflag", "l_linestatus"]
@@ -118,6 +140,8 @@ for o in out:
     # We'll re-sort so that the order of the groups doesn't give anything away.
     o = o.sort("l_returnflag", "l_linestatus")  # TODO generalize
 
+# Output of this step:
+# 1. out: List[DataFrame] - results of running the query $SAMPLES times, with all groups present in each output
 
 ### Convert to Numpy Array for PAC logic
 
@@ -137,6 +161,10 @@ def unwrapDataFrame(df: DataFrame) -> np.ndarray:
 out_np: List[np.ndarray] = [unwrapDataFrame(o) for o in out]
 
 ### Compute PAC Noise
+
+# Input to PAC noise step:
+# 1. out_np: List[np.ndarray] - the outputs of the query as numpy arrays
+# 2. SAMPLES: int - the number of samples taken
 
 max_mi: float = 1./4
 
