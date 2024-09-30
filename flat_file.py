@@ -66,8 +66,8 @@ while len(out) < SAMPLES:
 
     df4 = (df3.groupBy("l_returnflag", "l_linestatus")
             .agg(
-                F.col("l_returnflag"),
-                F.col("l_linestatus"),
+                #F.col("l_returnflag"),  # implicitly output because this is a group by key
+                #F.col("l_linestatus"),  # implicitly output because this is a group by key
                 F.sum("l_quantity").alias("sum_qty"),
                 F.sum("l_extendedprice").alias("sum_base_price"),
                 F.sum(F.col("l_extendedprice") * (1 - F.col("l_discount"))).alias("sum_disc_price"),
@@ -90,8 +90,8 @@ GROUP_BY_KEYS = ["l_returnflag", "l_linestatus"]
 df_unsampled_output = (df2
                         .groupBy(*GROUP_BY_KEYS)
                         .agg(
-                            F.col("l_returnflag"),
-                            F.col("l_linestatus"),
+                            #F.col("l_returnflag"),  # implicitly output because this is a group by key
+                            #F.col("l_linestatus"),  # implicitly output because this is a group by key
                             F.sum("l_quantity").alias("sum_qty"),
                             F.sum("l_extendedprice").alias("sum_base_price"),
                             F.sum(F.col("l_extendedprice") * (1 - F.col("l_discount"))).alias("sum_disc_price"),
@@ -106,7 +106,7 @@ df_unsampled_output = (df2
 
 # Build a template: Zero out everything but the group-by columns
 df_unsampled_zeroed = df_unsampled_output.select(
-    *GROUP_BY_KEYS, # retain only values of the group-by columns
+    *GROUP_BY_KEYS, # leave grouped-by columns unchanged
     *[F.lit(0).alias(col) for col in df_unsampled_output.columns if col not in GROUP_BY_KEYS] # set all other columns to zeroes
 )
 
@@ -122,8 +122,6 @@ for o in out:
     
     # We'll re-sort so that the order of the groups doesn't give anything away.
     o = o.sort("l_returnflag", "l_linestatus")  # TODO generalize
-
-    o.show()
 
 ### Count thresholding
 # If the number of rows from the original table contributing to any of the groups is smaller than the threshold, we omit the group
