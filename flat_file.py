@@ -164,35 +164,29 @@ out_np: List[np.ndarray] = [unwrapDataFrame(o) for o in out]
 
 max_mi: float = 1./4
 
-# Use the identity matrix for our projection matrix
-dimensions = len(out_np[0])
+dimensions: int = len(out_np[0])
 proj_matrix: np.ndarray = np.eye(dimensions)
+out_np_2darr = [np.atleast_2d(o) for o in out_np] # make sure all the DF -> np.ndarray conversions result in 2d arrays
 
-# projected samples used to estimate variance in each basis direction
-# est_y[i] is a list of magnitudes of the outputs in the i-th basis direction
-est_y: List[List[np.ndarray]] = [[] for _ in range(dimensions)]
-
-for i in range(SAMPLES):
-    est_y[i].append(out_np[i])
+# est_y[i] is a numpy array of magnitudes of the outputs in the i-th basis direction
+est_y: np.ndarray = np.stack(out_np_2darr, axis=-1).reshape(dimensions, SAMPLES)
 
 # get the variance in each basis direction
-fin_var: List[np.floating[Any]] = [np.var(est_y[i]) for i in range(dimensions)]
-# and the mean in each basis direction
-fin_mean: List[np.floating[Any]] = [np.mean(est_y[i]) for i in range(dimensions)]
+fin_var: np.ndarray = np.var(est_y, axis=1)  # shape (dimensions,)
+sqrt_total_var: np.floating[Any] = np.sum(np.sqrt(fin_var))
 
-sqrt_total_var = sum([fin_var[x]**0.5 for x in range(len(fin_var))])
+pac_noise: np.ndarray = (1./(2*max_mi)) * sqrt_total_var * np.sqrt(fin_var)  # variance of the PAC noise
 
-pac_noise: np.ndarray = np.array([np.inf for _ in range(dimensions)])
-for i in range(dimensions):
-    pac_noise[i] = float(1./(2*max_mi) * fin_var[i]**0.5 * sqrt_total_var)
+pac_noises_to_add: np.ndarray = np.random.normal(loc=0, scale=pac_noise)
 
-pac_noises_to_add = list(pac_noise)
-pac_noises_other_outputs = [sqrt_total_var, fin_var, fin_mean]
-
-#print(pac_noises_to_add)
-#print(pac_noises_other_outputs)
+#print("pac_noises_to_add", pac_noises_to_add)
 
 # Add noise element-wise to the outputs
+pac_release = out_np[0] + pac_noises_to_add
+print("pac_release", pac_release)
+
+# Output of PAC Noise step:
+# 1. pac_release: np.ndarray - the PAC release of the query output
 
 def updateDataFrame(vec: np.ndarray, df: DataFrame) -> DataFrame:
     """
@@ -216,22 +210,9 @@ def updateDataFrame(vec: np.ndarray, df: DataFrame) -> DataFrame:
 
     return updated_df
 
-# Apply the PAC noise to the output
-# use the first sample as the base for the output
-
-true_output = out[0]
-true_output_np = out_np[0]
-
-pac_noises_to_add_np = np.array(pac_noises_to_add)
-
-# Add PAC noise to the output, element wise addition of numpy arrays
-noisy_output_np = true_output_np + pac_noises_to_add_np
-
 # Update the DataFrame with the noisy output
-noisy_output_df = updateDataFrame(noisy_output_np, template)
-
+noisy_output_df = updateDataFrame(pac_release, template)
 noisy_output_df.show()
-
 
 ### Count thresholding
 
