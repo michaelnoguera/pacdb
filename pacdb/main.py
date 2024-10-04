@@ -1,14 +1,18 @@
 from dataclasses import dataclass
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 from typing_extensions import Protocol
 
 import numpy as np
+import time
 
 from pyspark.sql import DataFrame, Column
 import pyspark.sql.types as T
 import pyspark.pandas as ps
 
+from pacdb.threshold.threshold import Threshold
+
 from .sampler import DataFrameSampler, SamplerOptions
+from .budget_accountant import BudgetAccountant
 
 from tqdm import tqdm
 
@@ -68,6 +72,12 @@ class PACDataFrame:
         self.options = PACOptions()
         self.query: QueryFunction | None = None  # set by withQuery
 
+        self.thresholder = Threshold()
+        self.groupByCol = ''
+        self.agg_mapping = {'avg': 'avg',
+                    'sum': 'sum'    }
+        self.agg = None
+
     @classmethod
     def fromDataFrame(cls, df: DataFrame) -> "PACDataFrame":
         """
@@ -81,6 +91,12 @@ class PACDataFrame:
         """
         self.options = options
         return self
+    
+    def setGroupBy(self, groupByCol):
+        self.groupByCol = groupByCol
+    
+    def setAgg(self, agg):
+        self.agg = self.agg_mapping.get(agg)
 
     ### Sampler methods ###
 
@@ -148,22 +164,11 @@ class PACDataFrame:
         dimensions = len(self._produce_one_sampled_output())
         proj_matrix: np.ndarray = np.eye(dimensions) # just creates a diagonal matrix
 
-        print(f"chai_debug: The identity matrix dimensions are : {dimensions}")
-
-        # TODO: Use the SVD matrix as the projection matrix
-        # Steps seem to be - run mechanism for n(=5000) trials, find outputs, use following -
-        # y_cov = np.cov(np.array(outputs).T)
-        
-        # u, eigs, u_t = np.linalg.svd(y_cov)
-        # proj_matrix = u
-
         if not quiet:
-            print(f"max_mi: {max_mi}, eta: {eta}, dimensions: {dimensions}")
             print("Hybrid Noise: Using the identity matrix as the projection matrix.")
         else:
             print("Anisotropic Noise: Using SVD to find the projection matrix.")
 
-        # where did this come from hmm
         # projected samples used to estimate variance in each basis direction
         # est_y[i] is a list of magnitudes of the outputs in the i-th basis direction
         # est_y: List[List[np.ndarray]] = [[] for _ in range(dimensions)]
@@ -172,11 +177,14 @@ class PACDataFrame:
         est_y = {}
         prev_ests = None
 
+
+        # TODO
         converged = False
         curr_trial = 0
 
         if not quiet:
             progress = tqdm()
+
 
         while not converged:
             # Step 1: sample
@@ -210,45 +218,15 @@ class PACDataFrame:
                         for ind in est_y:
                             prev_ests[ind] = np.var(est_y[ind])
 
-                # if not quiet:
-                #     loss = sum(abs(np.var(est_y[i]) - prev_ests[i]) for i in range(dimensions))
-                #     target = eta * dimensions
-                #     progress.update(10)
-                #     progress.set_postfix({"loss": loss, "target": target})
-
-                # # If all dimensions' variance estimates changed by less than eta, we have converged
-                # if all(abs(np.var(est_y[i]) - prev_ests[i]) <= eta for i in range(dimensions)):
-                #     converged = True
-                # else:
-                #     # we have not converged, so update the previous estimates and continue
-                #     prev_ests = [np.var(est_y[i]) for i in range(dimensions)]
             curr_trial += 1
 
-        # Now that we have converged, get the variance in each basis direction
-        # fin_var: List[np.floating[Any]] = [np.var(est_y[i]) for i in range(dimensions)]
-
-        # if not quiet:
-        #     progress.close()
-        #     print(f"Converged after {curr_trial} trials")
-        #     print(f"Final variance estimates: {fin_var}")
-
-        # sqrt_total_var = sum(fin_var)**0.5
-        
         fin_var = {ind: np.var(est_y[ind]) for ind in est_y}
 
         noise = {}
         sqrt_total_var = sum(fin_var.values())**0.5
 
-        print(f'chai_debug: for MI = {max_mi} sqrt total var is {sqrt_total_var}')
         for ind in fin_var:
             noise[ind] = 1./max_mi**0.5 * fin_var[ind]**0.5 * sqrt_total_var
-
-        # noise: List[float] = [np.inf for _ in range(dimensions)]
-        # for i in range(dimensions):
-        #     # what is this??!
-        #     noise[i] = 1./max_mi**0.5 * fin_var[i]**0.5 * sqrt_total_var
-
-        # print(f'Computed noise (variances) is {noise}')
 
         return noise
 
@@ -263,33 +241,76 @@ class PACDataFrame:
             print(f'Sample: {result} + Noise = Noised: {noised}')
         
         return np.array(noised)
+    
+    def applyGroupBy(df: DataFrame, groupByCol: str) -> dict:
+        """
+        Groups the DataFrame by the specified column and returns a dictionary of the group and its count.
+        """
+        # Group by the specified column and count the number of rows in each group
+        grouped_df = df.groupBy(groupByCol).count()
+        
+        # Collect the results as a list of Row objects
+        grouped_list = grouped_df.collect()
+        
+        # Convert the list of Row objects to a dictionary
+        result_dict = {row[groupByCol]: row['count'] for row in grouped_list}
+        
+        return result_dict
 
-    def releaseValue(self, quiet=False) -> DataFrame:
+    def releaseValue(self, quiet=False, threshold=False, threshold_value=3) -> DataFrame:
         """
         Execute the query with PAC privacy.
         """
-        
+        # sample to determine size of output
         X: DataFrame = self.sampler.sample()
         Y: DataFrame = self._applyQuery(X) 
         output: np.ndarray = self._unwrapDataFrame(Y)
 
         if not quiet:
-            print("Found output format of query: ")
             zeroes = np.zeros(output.shape)
-            self._updateDataFrame(zeroes, Y).show()
+            self._updateDataFrame(zeroes, Y)
 
-        noise: List[float] = self._estimate_hybrid_noise()
+        noise: List[float] = self._estimate_hybrid_noise(quiet=quiet)
 
-        # noised_output: np.ndarray = self._add_noise(output, noise, quiet=quiet)
+        # take final sample
+        final_X: DataFrame = self.sampler.sample()
+        Y: DataFrame = self._applyQuery(final_X) 
+        output: np.ndarray = self._unwrapDataFrame(Y)
 
-        # output_df = self._updateDataFrame(noised_output, Y)
 
-        # if not quiet:
-        #     print("Inserting to dataframe:")
-        #     output_df.show()
+
+
+        # threshold
+        if threshold:
+            self.thresholder.set_threshold(threshold)
+            print(final_X)
+            print(self.groupByCol)
+            dict_of_counts = self.applyGroupBy(final_X, self.groupByCol)
+            
+            new_dict = {key: value >= threshold for key, value in dict_of_counts.items()}
+
+            final_Y: DataFrame = self._applyQuery(final_X) # DF: col 1: guardian col 2: avg
+
+            group_col = final_Y.columns[0]
+            agg_col = final_Y.columns[1]
+
+            final_Y[agg_col] = final_Y[agg_col].where(final_Y[group_col].map(new_dict), 0)
+            final_output: np.ndarray = self._unwrapDataFrame(final_Y)
+        
+        else:
+            final_Y: DataFrame = self._applyQuery(final_X) 
+            final_output: np.ndarray = self._unwrapDataFrame(final_Y)
+
+        # this stays the same assuming that noise is added on default values if threshold was not met
+        noised_output: np.ndarray = self._add_noise(final_output, noise, quiet=quiet)
+
+        output_df = self._updateDataFrame(noised_output, Y)
+
+        if not quiet:
+            print("Inserting to dataframe:")
+            output_df.show()
         
         return noise
-
 
     ### Query methods ###
 

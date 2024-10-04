@@ -1,7 +1,7 @@
 """Budget Accountant Class"""
 class BudgetAccountant:
 
-    def __init__(self, max_mi) -> None:
+    def __init__(self, max_mi=1/.8) -> None:
         self.privacy_budget = max_mi
 
 

@@ -15,22 +15,12 @@ import pyspark.sql.types as T
 from pyspark.sql import DataFrame, Row
 from pyspark.sql.functions import lit
 
-# from pacdb.main import QueryFunction
-
 # TODO: incorporate ENUMS
 class AggregationType(Enum):
     AVG = 'avg'
 
 class FilterTypeEnum(Enum):
     GREATER_THAN = 'greater_than'
-
-"""
-Take query input
-and the new inputs you defined
-
-estimate_noise() - 
-release_value() - 
-"""
 
 class QueryFunction(Protocol):
     """
@@ -334,23 +324,6 @@ class PACWorker():
 
         output_df = self._apply_threshold(df=output_df, flag_dict=flag_dict)
         output_df.show()
-
-        
-    
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     """may not use"""
     
