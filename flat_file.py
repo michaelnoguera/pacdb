@@ -80,6 +80,7 @@ while len(out) < SAMPLES:
         )
     
     out.append(df4)
+    group_by_counts.append(group_by_count)
 
 # Output of query step:
 # 1. out: List[DataFrame] - results of running the query $SAMPLES times
@@ -135,6 +136,15 @@ for o in out:
     
     # We'll re-sort so that the order of the groups doesn't give anything away.
     o = o.sort("l_returnflag", "l_linestatus")  # TODO generalize
+
+# TODO: account for missing groups for group_by_counts too
+for group_by_count in group_by_counts:
+#     group_by_count = (group_by_count.union(template)  # append the zeroed-out rows to the output
+#          .groupBy(*GROUP_BY_KEYS)  # deduplicate the output, preferring the original values
+#          .agg(*[F.first(col).alias(col) for col in group_by_count.columns if col not in GROUP_BY_KEYS]))
+    
+    # We'll re-sort so that the order of the groups doesn't give anything away.
+    group_by_count = group_by_count.sort("l_returnflag", "l_linestatus")  # TODO generalize
 
 # Output of this step:
 # 1. out: List[DataFrame] - results of running the query $SAMPLES times, with all groups present in each output
@@ -217,33 +227,81 @@ noisy_output_df.show()
 ### Count thresholding
 
 # If the number of rows from the original table contributing to any of the groups is smaller than the threshold, we omit the group
-COUNT_THRESHOLD = 10
+COUNT_THRESHOLD = 2000
+
+DEFAULT_PAC_VALUE = 0
+
+MI_EPS_MAPPING = {
+    1./4: 1.64,
+    1./16: 0.73,
+    1./64: 0.36
+}
 
 # *********************Hybrid-DP Noise******************************
+from pyspark.sql.functions import lit, col
+from pyspark.sql.functions import when, monotonically_increasing_id
 
 # Step 1: Check group
-group_by_count = df3.groupBy("l_returnflag", "l_linestatus").count()
+# Since 0th sample was taken for PAC release
+print("Chai Debug: Add DP Noise to:")
+true_group_by_count_df = group_by_counts[0]
+
+true_group_by_count_np = unwrapDataFrame(true_group_by_count_df)
+print(true_group_by_count_np)
 
 # Step 2: Add DP-noise to each group
-# TODO: How to convert MI to epsilon? 
-epsilon = 0.5
+epsilon = MI_EPS_MAPPING[max_mi]
 sensitivity = 1 # since we are calculating count, sensitivity is 1
 scale = sensitivity / epsilon
 dp_noise = np.random.laplace(0, scale, 1)[0]
 
-# dp_noisy_group_by_count = group_by_count + dp_noise
+dp_noisy_group_by_count_np = true_group_by_count_np + dp_noise
+print("Chai Debug: Noisy DP group by counts are", dp_noisy_group_by_count_np)
 
 # Step 3: Check if noisy_group_by_count is less than threshold -- this is the algorithm
-# flags = []
-# i = 0
-# for noisy_group in noisy_group_by_count:
-#     if noisy_group < COUNT_THRESHOLD:
-#         flags[i] = 1
-#     i += 1
+flags = []
+for noisy_group in dp_noisy_group_by_count_np:
+    if noisy_group < COUNT_THRESHOLD:
+        flags.append(1)
+    else:
+        flags.append(0)
+print("Chai Debug: Flags are", flags)
 
-# Step 4: Continue with adding PAC noise - at the very end, check if the PAC-noised-group was flagged using index i -- if yes, make the value 0
-    
+noisy_output_df_with_index = noisy_output_df.withColumn("id", monotonically_increasing_id())
+
+idx_ = 0
+for flag in flags:
+    if flag == 1:
+        # Set 'value' to 0 for the specified row
+        noisy_output_df_with_index = noisy_output_df_with_index.withColumn(
+            "sum_qty", 
+            when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["sum_qty"])
+        ).withColumn(
+            "sum_base_price", 
+            when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["sum_base_price"])
+        ).withColumn(
+            "sum_disc_price", 
+            when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["sum_disc_price"])
+        ).withColumn(
+            "sum_charge", 
+            when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["sum_charge"])
+        ).withColumn(
+            "avg_qty", 
+            when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["avg_qty"])
+        ).withColumn(
+            "avg_price", 
+            when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["avg_price"])
+        ).withColumn(
+            "avg_disc", 
+            when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["avg_disc"])
+        ).withColumn(
+            "count_order", 
+            when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["count_order"])
+        )
+
+    idx_ += 1
+        
 # *********************Hybrid-DP Noise******************************
-
-# TODO addition of dp noise
-# TODO make the zeroed-out values not have pac noise added if that is what should happen
+# noisy_output_df_with_index.show()
+release_df = noisy_output_df_with_index.drop("id")
+release_df.show()
