@@ -238,9 +238,6 @@ MI_EPS_MAPPING = {
 }
 
 # *********************Hybrid-DP Noise******************************
-from pyspark.sql.functions import lit, col
-from pyspark.sql.functions import when, monotonically_increasing_id
-
 # Step 1: Check group
 # Since 0th sample was taken for PAC release
 print("Chai Debug: Add DP Noise to:")
@@ -267,7 +264,7 @@ for noisy_group in dp_noisy_group_by_count_np:
         flags.append(0)
 print("Chai Debug: Flags are", flags)
 
-noisy_output_df_with_index = noisy_output_df.withColumn("id", monotonically_increasing_id())
+noisy_output_df_with_index = noisy_output_df.withColumn("id", F.monotonically_increasing_id())
 
 idx_ = 0
 for flag in flags:
@@ -275,28 +272,28 @@ for flag in flags:
         # Set 'value' to 0 for the specified row
         noisy_output_df_with_index = noisy_output_df_with_index.withColumn(
             "sum_qty", 
-            when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["sum_qty"])
+            F.when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["sum_qty"])
         ).withColumn(
             "sum_base_price", 
-            when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["sum_base_price"])
+            F.when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["sum_base_price"])
         ).withColumn(
             "sum_disc_price", 
-            when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["sum_disc_price"])
+            F.when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["sum_disc_price"])
         ).withColumn(
             "sum_charge", 
-            when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["sum_charge"])
+            F.when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["sum_charge"])
         ).withColumn(
             "avg_qty", 
-            when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["avg_qty"])
+            F.when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["avg_qty"])
         ).withColumn(
             "avg_price", 
-            when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["avg_price"])
+            F.when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["avg_price"])
         ).withColumn(
             "avg_disc", 
-            when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["avg_disc"])
+            F.when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["avg_disc"])
         ).withColumn(
             "count_order", 
-            when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["count_order"])
+            F.when(noisy_output_df_with_index["id"] == idx_, 0).otherwise(noisy_output_df["count_order"])
         )
 
     idx_ += 1
