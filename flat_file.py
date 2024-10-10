@@ -34,7 +34,7 @@ warnings.filterwarnings("ignore", category=PandasAPIOnSparkAdviceWarning)
 
 # load tpch tables from data/tpch/*.parquet
 # TPCH_TABLE_NAMES = ["customer", "lineitem", "nation", "orders", "part", "partsupp", "region", "supplier"]
-TPCH_TABLE_NAMES = ["lineitem"]  # for q1 we only need this one table
+TPCH_TABLE_NAMES = ["customer", "lineitem", "orders"]
 
 tables: Dict[str, DataFrame] = {
     t: spark.read.parquet(f"./data/tpch/{t}.parquet") for t in TPCH_TABLE_NAMES
@@ -46,20 +46,29 @@ tables: Dict[str, DataFrame] = {
 # 1. tables: Dict[str, DataFrame] - the tables to query
 #  . the query to run (expressed here inline)
 
-df = tables["lineitem"]
+lineitem_df = tables["lineitem"]
+customers_df = tables["customer"]
+orders_df = tables["orders"]
 
 # Push down filter all the way
-df2 = df.filter(F.col("l_shipdate") <= "1998-09-02")
+df2 = lineitem_df.filter(F.col("l_shipdate") <= "1998-09-02")
+
+# Push down filter and selection on orders
+orders_df2 = (orders_df.join(df2, orders_df.o_orderkey == df2.l_orderkey, "inner")  # remove orders outside the date range
+              .select("o_orderkey", "o_custkey"))  # we only need this for o_orderkey -> o_custkey
 
 # We have to sample before we aggregate
-# We need many samples, though, so we'll put them all in an array
-
 SAMPLES = 10
 out: List[DataFrame] = []
-group_by_counts: List[int] = []
+group_by_counts: List[DataFrame] = []
 
 while len(out) < SAMPLES:
-    df3 = df2.sample(withReplacement=False, fraction=0.5)  # sampling step
+    # Sample 50% of customers, then subset lineitem table to include only orders from those customers 
+    customer_sample = customers_df.sample(withReplacement=False, fraction=0.5)
+    orders_sample = orders_df2.join(customer_sample, orders_df2.o_custkey == customer_sample.c_custkey, "inner")
+    df2_sample = df2.join(orders_sample, df2.l_orderkey == orders_sample.o_orderkey, "inner").select(df2.columns)
+
+    df3 = df2_sample
 
     group_by_count = df3.groupBy("l_returnflag", "l_linestatus").count()
 
