@@ -22,6 +22,7 @@ The graphs are located in outputs/pac-student_performance-sparkless.
 
 Setup:
 python3.11 -m venv .venv
+source .venv/bin/activate
 pip3 install -r requirements.txt
 
 then make sure that you are using jupyter kernel at .venv/bin/jupyter
