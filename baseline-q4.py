@@ -1,8 +1,9 @@
+#!.venv/bin/python3
 """
 Demo of our modified TPC-H query 4.
 """
 import duckdb
-import pyarrow.parquet as pq
+import pyarrow.parquet as pq  # type: ignore[import-untyped]
 
 con = duckdb.connect(database=':memory:')
 

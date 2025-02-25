@@ -1,10 +1,11 @@
+#!../../.venv/bin/python3
 """
 Generate the TPC-H tables by using the DuckDB tpch plugin.
 Export tables to parquet files saved here for use in experiments.
 """
 
 import duckdb
-import pyarrow.parquet as pq
+import pyarrow.parquet as pq  # type: ignore[import-untyped]
 
 con = duckdb.connect(database=':memory:')
 con.execute("INSTALL tpch; LOAD tpch")
