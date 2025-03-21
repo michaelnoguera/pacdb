@@ -10,3 +10,5 @@ derby.log
 
 .envrc
 .venv
+
+.tmp/
