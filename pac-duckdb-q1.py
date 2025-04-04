@@ -39,7 +39,7 @@ row_count = lineitem_df.shape[0]
 # This will give us a 50% sample of the lineitem table for each sample # s
 
 SAMPLES = 6
-TABLE_TO_SAMPLE = 'lineitem'
+TABLE_TO_SAMPLE = 'orders'
 assert SAMPLES % 2 == 0, "SAMPLES must be even to create complementary samples."
 
 con.execute(f"""
@@ -84,8 +84,9 @@ SELECT
     2*count(*) AS count_order
 FROM
     lineitem
+JOIN orders ON lineitem.l_orderkey = orders.o_orderkey
 JOIN random_samples AS rs
-    ON rs.row_id = lineitem.rowid
+    ON rs.row_id = orders.rowid
 WHERE
     l_shipdate <= CAST('1998-09-02' AS date)
     AND rs.random_binary = 1.0
@@ -98,21 +99,37 @@ ORDER BY
     l_linestatus;
 """)
 
-sample_sizes = con.execute("""
-SELECT SUM(random_binary) AS sample_size
+print("number of selected orders")
+print(con.execute("""
+SELECT SUM(random_samples.random_binary) AS num_orders
 FROM random_samples
+JOIN orders ON random_samples.row_id = orders.rowid
 GROUP BY sample_id;
-""").fetchdf()
+""").pl().with_row_index())
+
+print("number of selected lineitems")
+sample_sizes = con.execute("""
+SELECT COUNT(*) AS sample_size
+FROM random_samples
+JOIN orders ON random_samples.row_id = orders.rowid
+JOIN lineitem ON orders.o_orderkey = lineitem.l_orderkey
+WHERE random_binary = 1.0
+GROUP BY sample_id;
+""").pl().with_row_index()
 
 print(sample_sizes)
 
-def run_query_for_all_samples():
-    """Execute the prepared statement for each sample and print the results."""
 
-dfs: List[pl.DataFrame] = []
+#dfs: List[pl.DataFrame] = []
 for s in range(SAMPLES):
-    dfs.append(con.execute(f"EXECUTE count_orders(sample := {s});").pl())
+    print(f"con.execute(f'EXECUTE count_orders(sample := {s});")
+    print(con.execute(f"EXECUTE count_orders(sample := {s});").pl())
+    #dfs.append(con.execute(f"EXECUTE count_orders(sample := {s});").pl())
 
-dfs[0]
+#dfs[0]
 
 
+
+
+for s in range(SAMPLES):
+    con.execute(f"EXECUTE count_orders(sample := {s});")
