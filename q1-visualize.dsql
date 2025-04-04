@@ -7,15 +7,15 @@ PRAGMA profiling_output = '/Users/michael/projects/dpdb/pacdb/randomtable.json';
             
 CREATE TABLE random_samples AS
 WITH sample_numbers AS (
-    SELECT range AS sample_id FROM range(512)
+    SELECT range AS sample_id FROM range(1024 // 2)
 ),
 random_values AS (
     SELECT 
         sample_numbers.sample_id, 
-        orders.rowid AS row_id,
+        customer.rowid AS row_id,
         FLOOR(RANDOM() * 2) AS random_binary
     FROM sample_numbers
-    JOIN orders ON TRUE  -- Cross join to duplicate rows for each sample
+    JOIN customer ON TRUE  -- Cross join to duplicate rows for each sample
 )
 SELECT
     sample_id,
@@ -24,7 +24,7 @@ SELECT
 FROM random_values
 UNION ALL
 SELECT -- select the complementary samples too
-    512 + sample_id,
+    (1024 // 2) + sample_id,
     row_id,
     1 - random_binary  -- Inverse the random_binary to get the complementary sample
 FROM random_values;
@@ -45,8 +45,9 @@ SELECT
 FROM
     lineitem
 JOIN orders ON lineitem.l_orderkey = orders.o_orderkey
+JOIN customer ON orders.o_custkey = customer.c_custkey
 JOIN random_samples AS rs
-    ON rs.row_id = orders.rowid
+    ON rs.row_id = customer.rowid
 WHERE
     l_shipdate <= CAST('1998-09-02' AS date)
     AND rs.random_binary = 1.0
