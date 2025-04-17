@@ -12,3 +12,7 @@ derby.log
 .venv
 
 .tmp/
+
+outputs/pac-duckdb-q1
+outputs/pac-duckdb-q2
+outputs/pac-duckdb-q2-inner
