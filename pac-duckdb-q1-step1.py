@@ -26,30 +26,27 @@
 #                                └─────────────────────────┘
 # ```
 
-# In[1]:
+# In[ ]:
 
 
 #!/usr/bin/env python
 # coding: utf-8
 
-EXPERIMENT = 'pac-duckdb-q1'
-OUTPUT_DIR = f'./outputs/{EXPERIMENT}-step1'
-
 import os
-from typing import List
+import pickle
+import shutil
+
+import duckdb
+import polars as pl
+
+EXPERIMENT = "pac-duckdb-q1"
+OUTPUT_DIR = f"./outputs/{EXPERIMENT}-step1"
+
 if not os.path.exists(OUTPUT_DIR):
     os.makedirs(OUTPUT_DIR)
 
-import numpy as np
-import pickle
-import json
-import duckdb
-import polars as pl
-import pyarrow as pa
-import shutil
 
-
-# In[2]:
+# In[ ]:
 
 
 # duckdb load data/tpch/tpch.duckdb into the temporary in-memory database
@@ -101,10 +98,10 @@ ORDER BY sample_id, row_id;
 
 # The randomness of what rows are chosen is saved to disk in `random_binary.json`. For each sample #, there is an array with one entry per row, where 1 means the row was chosen and 0 means it was not.
 
-# In[4]:
+# In[ ]:
 
 
-con.execute(f"""
+con.execute("""
 SELECT sample_id, array_agg(random_binary::TINYINT) as random_binary
 FROM random_samples
 GROUP BY sample_id;

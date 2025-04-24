@@ -15,7 +15,7 @@ then make sure that you are using jupyter kernel at .venv/bin/jupyter
 The following steps will work to run Q1. Make sure you don't have anything precious in the outputs folder.
 
 rm -r ./outputs/* 
-python3.11 pac-duckdb-step1.py
+python3.11 pac-duckdb-q1-step1.py
 python3.11 pac-duckdb-step2-caller.py -e pac-duckdb-q1 -mi 0.125
 python3.11 pac-duckdb-q1-step3.py
 

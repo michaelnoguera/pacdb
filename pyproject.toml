@@ -22,6 +22,7 @@ dependencies = [
     "kiwisolver==1.4.8",
     "matplotlib==3.8.1",
     "matplotlib-inline==0.1.6",
+    "mypy>=1.15.0",
     "nest-asyncio==1.6.0",
     "numpy==1.26.0",
     "packaging==24.2",
@@ -38,11 +39,13 @@ dependencies = [
     "ptyprocess==0.7.0",
     "pure-eval==0.2.3",
     "pyarrow==14.0.1",
+    "pydantic>=2.11.3",
     "pygments==2.19.1",
     "pyparsing==3.2.1",
     "python-dateutil==2.9.0.post0",
     "pytz==2025.1",
     "pyzmq==26.2.1",
+    "ruff>=0.11.7",
     "six==1.17.0",
     "stack-data==0.6.3",
     "tornado==6.4.2",
@@ -50,3 +53,13 @@ dependencies = [
     "typing-extensions==4.12.2",
     "wcwidth==0.2.13",
 ]
+
+[tool.ruff]
+show-fixes = true
+line-length = 150
+extend-select = ["I"]
+
+[tool.mypy]
+strict = false
+ignore_missing_imports = true
+disallow_untyped_defs = false

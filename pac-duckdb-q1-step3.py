@@ -1,35 +1,27 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
+# In[ ]:
 
 
 #!/usr/bin/env python
 # coding: utf-8
 
-EXPERIMENT = 'pac-duckdb-q1'
-INPUT_ZIP = f'./outputs/{EXPERIMENT}-step2.zip'
-OUTPUT_DIR = f'./outputs/{EXPERIMENT}-step3'
-
+import json
 import os
-from typing import List
+import pickle
+import shutil
+import zipfile
+
+import parse
+import polars as pl
+
+EXPERIMENT = "pac-duckdb-q1"
+INPUT_ZIP = f"./outputs/{EXPERIMENT}-step2.zip"
+OUTPUT_DIR = f"./outputs/{EXPERIMENT}-step3"
+
 if not os.path.exists(OUTPUT_DIR):
     os.makedirs(OUTPUT_DIR)
-
-import numpy as np
-import pickle
-
-import duckdb
-import polars as pl
-import pyarrow as pa
-
-import zipfile
-import numpy as np
-import pickle
-import json
-import io
-import parse
-import shutil
 
 
 # In[2]:
@@ -114,8 +106,8 @@ allinfo2 = {
 df2 = []
 print(allcols)
 for row in allrows:
-    print(row + [allinfo2.get((rowidxes[tuple(row)], colidxes[col]), None) for col in OUTPUT_COLS])
-    df2.append(row + [allinfo2.get((rowidxes[tuple(row)], colidxes[col]), None) for col in OUTPUT_COLS])
+    print(list(row) + [allinfo2.get((rowidxes[tuple(row)], colidxes[col]), None) for col in OUTPUT_COLS])
+    df2.append(list(row) + [allinfo2.get((rowidxes[tuple(row)], colidxes[col]), None) for col in OUTPUT_COLS])
 
 
 # In[7]:
