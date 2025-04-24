@@ -5,21 +5,22 @@ import os
 import subprocess
 import parse
 import zipfile
+import shutil
 
-input_dir = './outputs/pac-duckdb-q1/json/'
-output_dir = './outputs/e2e-q1/'
-zip_output = './outputs/e2e-q1.zip'
+EXPERIMENT = 'pac-duckdb-q1'
+INPUT_DIR = f'./outputs/{EXPERIMENT}-step1/json'
+OUTPUT_DIR = f'./outputs/{EXPERIMENT}-step2'
 
 pattern = parse.compile("{n}.json")
 
-os.makedirs(output_dir, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-for filename in os.listdir(input_dir):
+for filename in os.listdir(INPUT_DIR):
     result = pattern.parse(filename)
     if result:
         n = result['n']
-        input_path = os.path.join(input_dir, filename)
-        output_path = os.path.join(output_dir, filename)
+        input_path = os.path.join(INPUT_DIR, filename)
+        output_path = os.path.join(OUTPUT_DIR, filename)
 
         cmd = [
             'python3.11', 'pac_e2e.py',
@@ -32,10 +33,5 @@ for filename in os.listdir(input_dir):
         subprocess.run(cmd)
 
 # Zip the output directory
-print(f'Zipping {output_dir} into {zip_output}')
-with zipfile.ZipFile(zip_output, 'w', zipfile.ZIP_DEFLATED) as zipf:
-    for root, _, files in os.walk(output_dir):
-        for file in files:
-            filepath = os.path.join(root, file)
-            arcname = os.path.relpath(filepath, start=output_dir)
-            zipf.write(filepath, arcname)
+print(f'Zipping {OUTPUT_DIR}.')
+shutil.make_archive(OUTPUT_DIR, 'zip', OUTPUT_DIR)

@@ -95,6 +95,7 @@ if __name__ == "__main__":
     j = {
         "col": entry["col"],
         "row": entry["row"],
+        "dtype": entry["dtype"],
         "value": release.tolist(),
     }
 
