@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 import numpy as np
 from typing import List, Any
+import polars as pl
 
 ### Compute PAC Noise
 def get_pac_noise_scale(out_np_raw: np.ndarray, max_mi: float = 1./4) -> np.ndarray:

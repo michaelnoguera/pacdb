@@ -34,14 +34,12 @@ if __name__ == "__main__":
         result = pattern.parse(filename)
         if result:
             n = result['n']
-            input_path = os.path.join(INPUT_DIR, filename)
-            output_path = os.path.join(OUTPUT_DIR, filename)
 
             cmd = [
                 'python3.11', 'pac-duckdb-step2.py',
                 '-mi', str(mi),
-                '-o', output_path,
-                input_path
+                '-o', os.path.join(OUTPUT_DIR, f"{n}.json"),
+                os.path.join(INPUT_DIR, f"{n}.json")
             ]
 
             print(f'Running: {" ".join(cmd)}')
