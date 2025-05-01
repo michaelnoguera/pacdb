@@ -7,12 +7,12 @@ python3.11 pac-duckdb-step2-caller.py -e pac-duckdb-q1 -mi 0.125
 """
 
 
-import os
-import subprocess
-import parse
-import zipfile
-import shutil
 import argparse
+import os
+import shutil
+import subprocess
+
+import parse
 
 if __name__ == "__main__":
     # Parse command-line arguments

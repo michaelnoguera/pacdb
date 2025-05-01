@@ -2,8 +2,6 @@ import os
 import pickle
 import subprocess
 
-import polars as pl
-import papermill as pm
 import parse
 
 QUERYFOLDER = "./queries"
