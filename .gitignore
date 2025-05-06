@@ -12,3 +12,5 @@ derby.log
 .venv
 
 .tmp/
+
+ap-duckdb-*
