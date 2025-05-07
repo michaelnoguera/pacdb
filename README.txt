@@ -7,6 +7,21 @@ json files, one per entry, labeled with the row and column to which the entry be
 The folders full of json files in ./outputs are zipped to make tracking them in git manageable. Unzip
 the zip files if you want to see the data.
 
+Run in Docker (no setup):
+-------------------------
+docker build -t pacdb .
+docker run -it --rm \
+    --mount type=bind,source="$(pwd)",target=/app \
+    --tmpfs /app/.venv:uid=1000,gid=1000 \
+    -w /app \
+    -e UV_PROJECT_ENVIRONMENT=/app/.venv \
+    pacdb \
+    uv sync --offline && uv run autopac-duckdb-step1.py && uv run autopac-duckdb-step2.py && uv run autopac-duckdb-step3.py
+
+Setup (devcontainer):
+---------------------
+Open in VSCode, then Ctrl+Shift+P > Dev Containers: Reopen in Container
+
 Setup (uv):
 -----------
 curl -LsSf https://astral.sh/uv/install.sh | sh  # install uv
