@@ -8,6 +8,7 @@ python3.11 pac-duckdb-step2-caller.py -e pac-duckdb-q1 -mi 0.125
 
 
 import argparse
+import logging
 import os
 import shutil
 import subprocess
@@ -19,7 +20,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process input arguments.")
     parser.add_argument("-e", "--experiment", type=str, required=True, help="Experiment name")
     parser.add_argument("-mi", "--mi", type=float, required=False, help="MI value")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
     args = parser.parse_args()
+
+    # Configure logging level
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(asctime)s | %(filename)s:%(lineno)d %(levelname)s %(message)s"
+    )
 
     mi: float = args.mi or 1/4
 
@@ -39,12 +47,14 @@ if __name__ == "__main__":
                 'python3.11', 'pac-duckdb-step2.py',
                 '-mi', str(mi),
                 '-o', os.path.join(OUTPUT_DIR, f"{n}.json"),
-                os.path.join(INPUT_DIR, f"{n}.json")
             ]
+            if args.verbose:
+                cmd.append('-v')
+            cmd.append(os.path.join(INPUT_DIR, f"{n}.json"))
 
-            print(f'Running: {" ".join(cmd)}')
+            logging.info(f'Running "{" ".join(cmd)}"')
             subprocess.run(cmd)
 
     # Zip the output directory
-    print(f'Zipping {OUTPUT_DIR}.')
+    logging.info(f'Zipping {OUTPUT_DIR}.')
     shutil.make_archive(OUTPUT_DIR, 'zip', OUTPUT_DIR)

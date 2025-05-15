@@ -1,107 +1,139 @@
-#!./venv/bin/python
-# -*- coding: utf-8 -*-
-
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
-from typing import Any
 
 import numpy as np
+import polars as pl
 
-
-### Compute PAC Noise
-def get_pac_noise_scale(out_np_raw: np.ndarray, max_mi: float = 1./4) -> np.ndarray:
-    out_np = out_np_raw.copy()
-    print(f"out_np.shape: {out_np.shape}")
-
-    out_np_2darr = [np.atleast_1d(o) for o in out_np] # make sure all the DF -> np.ndarray conversions result in 2d arrays
-    est_y: np.ndarray = np.stack(out_np_2darr, axis=-1)
-    print(f"est_y.shape: {est_y.shape}")
-    print(f"est_y: {est_y}")
-
-    # get the scale in each basis direction
-    fin_var: np.ndarray = np.var(est_y, axis=1)  # shape (dimensions,)
-    print(f"fin_var: {fin_var}")
-    # fin_var: np.ndarray = np.array([float(x) for x in fin_var], dtype=np.float64)
-    sqrt_total_var: np.floating[Any] = np.sum(np.sqrt(fin_var))
-    print(f"sqrt_total_var: {sqrt_total_var}")
-
-    pac_noise: np.ndarray = (1./(2*max_mi)) * fin_var
-    print(f"For mi={max_mi}, we should add noise from a normal distribution with scale: pac_noise: {pac_noise}")
-    return pac_noise
-
+# Default max mutual information bound
+DEFAULT_MI = 1/4
 
 if __name__ == "__main__":
     # Parse command-line arguments
-    parser = argparse.ArgumentParser(description="Process input arguments.")
-    parser.add_argument("-mi", type=float, required=False, help="MI value")
-    parser.add_argument("json_file", type=str, help="Path to the JSON file")
-    parser.add_argument("-o", "--output-file", type=str, help="Output file path")
+    parser = argparse.ArgumentParser(description="Add PAC noise to a sample from input JSON values.")
+    parser.add_argument("-mi", "--max-mi", type=float, default=DEFAULT_MI)
+    parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument("input_file", type=Path)
+    parser.add_argument("-o", "--output-file", type=Path)
     args = parser.parse_args()
+   
+    # Configure logging level
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(asctime)s | %(filename)s:%(lineno)d %(levelname)s %(message)s"
+    )
 
-    # Read JSON file
-    path = Path(args.json_file)
-    if not path.exists():
-        print(f"Error: File '{args.json_file}' does not exist.")
+    mi = args.max_mi
+    input_path = args.input_file
+
+    # Validate input file exists
+    if not input_path.exists():
+        logging.error("Input file '%s' does not exist.", input_path)
         sys.exit(1)
 
-    with path.open("r", encoding="utf-8") as file:
-        data = json.load(file)
+    # Load and parse JSON entry
+    try:
+        with input_path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        entry = data[0]
+    except (json.JSONDecodeError, IndexError) as e:
+        logging.error("Failed to read or parse '%s': %s", input_path, e)
+        sys.exit(1)
 
-    # Extract single entry
-    entry = data[0]
-    out_np = np.array(entry["values"], dtype=float)
+    # Map Polars dtype to numpy type
+    dtype_str = entry.get("dtype", "")
+    raw_values = entry.get("values", [])
 
-    print("Extracted Keys and Values:")
-    print(f"col: {entry['col']}")
-    print(f"row: {entry['row']}")
-    print(f"values: {out_np}")
+    scale = None
 
-    MI_OPTIONS = [0.001248318631131131, 1/64, 1/32, 1/16, 1/4, 1., 2., 4., 16.]
-    mi = args.mi or 1/4
-    
-    SAMPLES = len(out_np)
+    # Determine if numeric type
+    try:
+        series = pl.Series("v", raw_values)
+        try:
+            series = series.cast(eval(f"pl.{dtype_str}"))
+        except Exception:
+            series = series.cast(pl.Float64)
 
-    scale = get_pac_noise_scale(out_np, mi) # estimate the stability of the query
-    print(f"mi={mi}, scale={scale}")
-    
-    # for each PAC release at this MI, we will choose a sample from the pre-generated out_np list and add noise to it
-    steps = {
-        "mi": mi,
-        "scale": scale,
-    }
+        is_numeric = series.dtype.is_numeric()
 
-    # choose our sample
-    chosen_index = np.random.choice(range(SAMPLES))
-    chosen_sample = out_np[chosen_index].copy()
-    steps["chosen_sample"] = chosen_sample
-    
-    # add noise to it
-    # chosen_noise will also be an array
-    
-    chosen_noise = np.random.normal(loc=0, scale=np.sqrt(scale))
-    steps["chosen_noise"] = chosen_noise
-    
-    print(f'Chosen Sample {chosen_sample}')
-    # chosen_sample = np.array([float(x) for x in chosen_sample], dtype=np.float64)
-    release = chosen_sample + chosen_noise # do_pac_and_release(out_np, mi, scale, chosen_index)
+        if series.dtype.is_decimal():
+            series = series.cast(pl.Float64)
 
-    print(f"sample(#{chosen_index}):{chosen_sample} + noise:{chosen_noise} = {release}")
-    steps["release"] = release
-    #release[0] *= 2   # manually correct count = count * 2
+        values = series.to_numpy()
+    except Exception:
+        logging.warning(
+            "Failed to cast values to Polars Series with dtype '%s'. Attempting numpy conversion.",
+            dtype_str
+        )
 
-    print(steps)
+        values = np.array(raw_values)
 
-    # Save a json file containing 'col', 'row', and 'value'
-    j = {
-        "col": entry["col"],
-        "row": entry["row"],
-        "dtype": entry["dtype"],
-        "value": release.tolist(),
+        if values.dtype.kind in 'biufc':  # Check if dtype is numeric (int, float, complex)
+            is_numeric = True
+
+    if is_numeric:
+        # Compute per-coordinate noise scale: variance / (2 * mi)
+        arr_2d = np.stack([np.atleast_1d(v) for v in values], axis=-1)
+        variances = np.var(arr_2d, axis=1)
+        scale = variances / (2 * mi)
+
+        logging.info("Stacked array shape: %s", arr_2d.shape)
+        logging.info("Calculated variances: %s", variances)
+        logging.info("Noise scale per coordinate (variance/(2*%s)): %s", mi, scale)
+        logging.info(
+            "Numeric type '%s' detected. Processing %d numeric samples.",
+            dtype_str, len(values)
+        )
+    else:
+        # Nothing to do for non-numeric types
+        pass
+
+        logging.info(
+            "Non-numeric type '%s' detected. Processing %d categorical values.",
+            dtype_str, len(values)
+        )
+
+    # Choose a sample at random
+    sample = np.random.choice(values)
+
+    # Compute noise for numeric types, none otherwise
+    if is_numeric:
+        # Ensure scale is a valid float or array of floats
+        if scale is None or np.any(np.isnan(scale)):
+            logging.error("Noise scale is invalid (None or NaN).")
+            sys.exit(1)
+        noise = np.random.normal(loc=0, scale=np.sqrt(scale))
+        release = sample + noise
+    else:
+        noise = None
+        release = sample
+
+    logging.info(
+        "Selected sample: %s; noise: %s; release: %s",
+        sample, noise, release
+    )
+
+    class CustomEncoder(json.JSONEncoder):
+        def default(self, obj):
+            # in order to put arbitrary values back into JSON, convert them to strings if needed
+            try:
+                return super().default(obj)
+            except TypeError:
+                return str(obj)
+
+    # Prepare output JSON
+    output = {
+        "col": entry.get("col"),
+        "row": entry.get("row"),
+        "dtype": dtype_str,
+        "value": release.tolist() if hasattr(release, 'tolist') else release,
     }
 
     if args.output_file:
-        output_file = Path(args.output_file)
-        with output_file.open("w", encoding="utf-8") as file:
-            json.dump(j, file, indent=4)
+        with args.output_file.open("w", encoding="utf-8") as f:
+            json.dump(output, f, indent=4, cls=CustomEncoder)
+    else:
+        print(json.dumps(output, indent=4, cls=CustomEncoder))
+

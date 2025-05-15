@@ -1,44 +1,52 @@
+import argparse
+import logging
 import os
-import pickle
 import subprocess
 
 import parse
 
 QUERYFOLDER = "./queries"
 
-# Execute all of ./queries/{query}.sql
-pattern = parse.compile("{q}.sql")
-queries_to_run = []
-for queryfile in os.listdir(QUERYFOLDER):
-    result = pattern.parse(queryfile)
-    if result:
-        query = result["q"]
-        queries_to_run.append(query)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Process input arguments.")
+    parser.add_argument("-mi", "--mi", type=float, required=False, help="MI value")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
+    args = parser.parse_args()
 
-for query in queries_to_run:
-    try:
-        print(f"Running query: {query}")
+        # Configure logging level
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(asctime)s | %(filename)s:%(lineno)d %(levelname)s %(message)s"
+    )
 
-        QUERY = query
-        
-        EXPERIMENT = f"ap-duckdb-{QUERY}"
-        OUTPUT_DIR = f"./outputs/{EXPERIMENT}-step3"
+    mi: float = args.mi or 1/4
 
-        INDEX_COLS = pickle.load(open(f'./outputs/{EXPERIMENT}-step1/INDEX_COLS.pkl', 'rb'))
-        OUTPUT_COLS = pickle.load(open(f'./outputs/{EXPERIMENT}-step1/OUTPUT_COLS.pkl', 'rb'))
-        templatedf_path = f'./outputs/{EXPERIMENT}-step1/template.pkl'
+    queries_to_run = []  # get filenames matching ./queries/{query}.sql
+    pattern = parse.compile("{q}.sql")
+    for queryfile in os.listdir(QUERYFOLDER):
+        result = pattern.parse(queryfile)
+        if result:
+            query = result["q"]
+            queries_to_run.append(query)
 
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
+    for query in queries_to_run:
+        try:
+            logging.info(f"Running query: {query}")
 
-        # INDEX_COLS = ['l_returnflag', 'l_linestatus']
-        # OUTPUT_COLS = ['sum_qty', 'sum_base_price', 'sum_disc_price', 'sum_charge', 'avg_qty', 'avg_price', 'avg_disc', 'count_order']
+            EXPERIMENT = f"ap-duckdb-{query}"
+            
+            OUTPUT_DIR = f"./outputs/{EXPERIMENT}-step3"
+            os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-        subprocess.run([
-            'python3.11', 'pac-duckdb-step2-caller.py', 
-            '-e', EXPERIMENT,
-            '-mi', '0.25',
-        ])
+            cmd = [
+                'python3.11', 'pac-duckdb-step2-caller.py', 
+                '-e', EXPERIMENT,
+                '-mi', str(mi),
+            ]
+            if args.verbose:
+                cmd.append('-v')
+            subprocess.run(cmd)
 
-    except Exception as e:
-        print(f"Error running query {query}: {e}")
-        continue
+        except Exception as e:
+            print(f"Error running query {query}: {e}")
+            continue
