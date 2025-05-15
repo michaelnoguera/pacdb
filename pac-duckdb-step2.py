@@ -42,9 +42,13 @@ if __name__ == "__main__":
         logging.error("Failed to read or parse '%s': %s", input_path, e)
         sys.exit(1)
 
-    # Map Polars dtype to numpy type
+    # Read values and dtype from JSON
     dtype_str = entry.get("dtype", "")
     raw_values = entry.get("values", [])
+
+    sample_size = entry.get("samples", 0)
+    if len(raw_values) < sample_size:
+        logging.warning("Sample size (%d) is larger than the number of values (%d).", sample_size, len(raw_values))
 
     scale = None
 
