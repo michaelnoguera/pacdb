@@ -17,7 +17,7 @@ import parse
 
 if __name__ == "__main__":
     # Parse command-line arguments
-    parser = argparse.ArgumentParser(description="Process input arguments.")
+    parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--experiment", type=str, required=True, help="Experiment name")
     parser.add_argument("-mi", "--mi", type=float, required=False, help="MI value")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")

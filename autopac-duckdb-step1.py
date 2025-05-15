@@ -38,16 +38,14 @@ for query in queries_to_run:
         for line in lines:
             result = pattern.parse(line)
             if result:
-                print(f"Found variable: {result['name']} = {result['value']}")
-                query_strings[result["name"]] = eval(result["value"])
+                print(f"Found variable: {result['name']} = {result['value'].strip()}")
+                query_strings[result["name"]] = eval(result["value"].strip())
 
         SAMPLES = int(query_strings["SAMPLES"]) or 1024
 
         # Now, find every occurence of `1024//2` and replace it with f`{SAMPLES//2}` in those two strings
         query_strings["sample"] = query_strings["sample"].replace("1024//2", f"{SAMPLES // 2}")
         query_strings["prepare"] = query_strings["prepare"].replace("1024//2", f"{SAMPLES // 2}")
-
-        print(query_strings)
 
         EXPERIMENT = f"ap-duckdb-{QUERY}"
         OUTPUT_DIR = f"./outputs/{EXPERIMENT}-step1"
