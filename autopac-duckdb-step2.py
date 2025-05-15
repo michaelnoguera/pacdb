@@ -1,5 +1,4 @@
 import argparse
-import logging
 import os
 import subprocess
 
@@ -8,16 +7,10 @@ import parse
 QUERYFOLDER = "./queries"
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Process input arguments.")
+    parser = argparse.ArgumentParser()
     parser.add_argument("-mi", "--mi", type=float, required=False, help="MI value")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
     args = parser.parse_args()
-
-        # Configure logging level
-    logging.basicConfig(
-        level=logging.INFO if args.verbose else logging.WARNING,
-        format="%(asctime)s | %(filename)s:%(lineno)d %(levelname)s %(message)s"
-    )
 
     mi: float = args.mi or 1/4
 
@@ -31,7 +24,7 @@ if __name__ == "__main__":
 
     for query in queries_to_run:
         try:
-            logging.info(f"Running query: {query}")
+            print(f"Running query: {query}")
 
             EXPERIMENT = f"ap-duckdb-{query}"
             
