@@ -83,8 +83,7 @@ GROUP BY
     s_name
 ORDER BY
     numwait DESC,
-    s_name
-LIMIT 100;
+    s_name;
 --end PREPARE_STEP--
 
 EXECUTE run_query(sample := 0);
