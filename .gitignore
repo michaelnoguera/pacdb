@@ -13,4 +13,4 @@ derby.log
 
 .tmp/
 
-ap-duckdb-*
+ap-duckdb-*.ipynb
