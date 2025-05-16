@@ -14,4 +14,3 @@ derby.log
 .tmp/
 
 ap-duckdb-*
-outputs/
