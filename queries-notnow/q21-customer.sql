@@ -34,17 +34,19 @@ ORDER BY sample_id, row_id;
 DEALLOCATE PREPARE run_query;
 
 PREPARE run_query AS 
-WITH lineitem_sample as (SELECT lineitem.*
-FROM lineitem,
-    orders,
-    customer,
-    random_samples AS rs
-WHERE
-    rs.row_id = customer.rowid
-    AND rs.random_binary = TRUE
-    AND rs.sample_id = $sample
-    AND o_custkey = c_custkey
-    AND o_orderkey = l_orderkey)
+WITH lineitem_sample as (
+    SELECT lineitem.*
+    FROM lineitem,
+        orders,
+        customer,
+        random_samples AS rs
+    WHERE
+        rs.row_id = customer.rowid
+        AND rs.random_binary = TRUE
+        AND rs.sample_id = $sample
+        AND o_custkey = c_custkey
+        AND o_orderkey = l_orderkey
+)
 SELECT
     s_name,
     count(*) AS numwait
