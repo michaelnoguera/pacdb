@@ -2,6 +2,8 @@ import os
 
 import papermill as pm
 import parse
+import time
+import datetime
 
 QUERYFOLDER = "./queries"
 
@@ -16,6 +18,8 @@ for queryfile in os.listdir(QUERYFOLDER):
 
 for query in queries_to_run:
     try:
+        start_time = time.time()
+        start_datetime = datetime.datetime.now()
         print(f"Running query: {query}")
 
         QUERY = query
@@ -69,7 +73,11 @@ for query in queries_to_run:
                 OUTPUT_COLS=query_strings["OUTPUT_COLS"],
             ),
         )
-
+        end_time = time.time()
+        end_datetime = datetime.datetime.now()
+        execution_time = end_time - start_time
+        with open('times/step1-execution_time.txt', 'a') as f:
+            f.write(f"{query}: {execution_time}\n")
     except Exception as e:
         print(f"Error running query {query}: {e}")
         continue

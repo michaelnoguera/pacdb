@@ -11,7 +11,7 @@ DROP TABLE IF EXISTS random_samples;
 
 CREATE TABLE random_samples AS
 WITH sample_numbers AS MATERIALIZED (
-    SELECT range AS sample_id FROM range(1024//2)
+    SELECT range AS sample_id FROM range(1024)
 ), random_values AS MATERIALIZED (
     SELECT 
         sample_numbers.sample_id,
@@ -24,12 +24,6 @@ SELECT
     sample_id,
     row_id,
     random_binary
-FROM random_values
-UNION ALL
-SELECT -- select the complementary samples too
-    (1024//2) + sample_id,
-    row_id,
-    NOT random_binary  -- Inverse the random_binary to get the complementary sample
 FROM random_values
 ORDER BY sample_id, row_id;
 --end SAMPLE_STEP--

@@ -1,13 +1,13 @@
 --var:SAMPLES = 1024
 --var:INDEX_COLS = []
---var:OUTPUT_COLS = ['promo_revenue']
+--var:OUTPUT_COLS = ['avg_yearly']
 
 --begin SAMPLE_STEP--
 DROP TABLE IF EXISTS random_samples;
 
 CREATE TABLE random_samples AS
 WITH sample_numbers AS MATERIALIZED (
-    SELECT range AS sample_id FROM range(1024 // 2)
+    SELECT range AS sample_id FROM range(1024)
 ), random_values AS MATERIALIZED (
     SELECT 
         sample_numbers.sample_id,
@@ -21,12 +21,6 @@ SELECT
     row_id,
     random_binary
 FROM random_values
-UNION ALL
-SELECT -- select the complementary samples too
-    (1024 // 2) + sample_id,
-    row_id,
-    NOT random_binary  -- Inverse the random_binary to get the complementary sample
-FROM random_values
 ORDER BY sample_id, row_id;
 --end SAMPLE_STEP--
 
@@ -36,12 +30,7 @@ DEALLOCATE PREPARE run_query;
 
 PREPARE run_query AS 
 SELECT
-    100.00 * sum(
-        CASE WHEN p_type LIKE 'PROMO%' THEN
-            l_extendedprice * (1 - l_discount)
-        ELSE
-            0
-        END) / sum(l_extendedprice * (1 - l_discount)) AS promo_revenue
+    sum(l_extendedprice) / 7.0 AS avg_yearly
 FROM
     lineitem,
     part,
@@ -54,9 +43,16 @@ WHERE
     AND rs.sample_id = $sample
     AND o_custkey = c_custkey
     AND o_orderkey = l_orderkey
-    AND l_partkey = p_partkey
-    AND l_shipdate >= date '1995-09-01'
-    AND l_shipdate < CAST('1995-10-01' AS date);
+    AND p_partkey = l_partkey
+    AND p_brand = 'Brand#23'
+    AND p_container = 'MED BOX'
+    AND l_quantity < (
+        SELECT
+            0.2 * avg(l_quantity)
+        FROM
+            lineitem
+        WHERE
+            l_partkey = p_partkey);
 --end PREPARE_STEP--
 
 
