@@ -30,8 +30,7 @@ DEALLOCATE PREPARE run_query;
 PREPARE run_query AS 
 SELECT
     s_name,
-    s_address,
-    1.0 as column_0
+    s_address
 FROM
     supplier,
     nation

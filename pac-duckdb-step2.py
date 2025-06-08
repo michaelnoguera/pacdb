@@ -82,9 +82,7 @@ if __name__ == "__main__":
     frac_nulls = 0.
     if not add_noise:
         frac_nulls = num_trials
-    if add_noise:
-        if not is_numeric:
-            assert(False)
+    elif is_numeric:
         # Compute per-coordinate noise scale: variance / (2 * mi)
         arr_2d = np.stack([np.atleast_1d(v) for v in values], axis=-1)
         variances = np.var(arr_2d, axis=1)
@@ -108,6 +106,8 @@ if __name__ == "__main__":
             # Choose a sample at random
             frac_samples = len(values) / sample_size
             logging.info(f'frac_samples: {frac_samples}')
+            if frac_samples > 1:
+                assert(False)
             if np.random.rand() < frac_samples:
                 sample = np.random.choice(values)
             else:
@@ -129,6 +129,32 @@ if __name__ == "__main__":
                     frac_nulls += 1
                 release = None
                 noise = None
+
+            logging.info(
+                "Selected sample: %s; noise: %s; release: %s",
+                sample, noise, release
+            )
+    else:
+        noise = 'uniform'
+        unique_values = list(set(values))
+        logging.info("Num unique values: %s", len(unique_values))
+        for _ in range(num_trials):
+            # Choose a sample at random
+            frac_samples = len(values) / sample_size
+            if frac_samples > 1:
+                assert(False)
+            logging.info(f'frac_samples: {frac_samples}')
+            if np.random.rand() < frac_samples:
+                sample = np.random.choice(values)
+            else:
+                sample = None
+
+            if sample is not None:
+                release = np.random.choice(unique_values)
+                releases.append(release)
+            else:
+                frac_nulls += 1
+                release = None
 
             logging.info(
                 "Selected sample: %s; noise: %s; release: %s",
