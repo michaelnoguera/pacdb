@@ -8,7 +8,8 @@ import numpy as np
 import polars as pl
 
 # Default max mutual information bound
-DEFAULT_MI = 1/4
+DEFAULT_MI = 1/2
+num_trials = 100
 
 if __name__ == "__main__":
     # Parse command-line arguments
@@ -18,7 +19,6 @@ if __name__ == "__main__":
     parser.add_argument("input_file", type=Path)
     parser.add_argument("-o", "--output-file", type=Path)
     args = parser.parse_args()
-   
     # Configure logging level
     logging.basicConfig(
         level=logging.INFO if args.verbose else logging.WARNING,
@@ -47,11 +47,14 @@ if __name__ == "__main__":
     raw_values = entry.get("values", [])
 
     sample_size = entry.get("samples", 0)
+    add_noise = True 
     if len(raw_values) < sample_size:
         logging.info("Sample size (%d) is larger than the number of values (%d).", sample_size, len(raw_values))
+        if len(raw_values) < sample_size/2:
+            add_noise = False # always return None
 
+    releases = []
     scale = None
-
     # Determine if numeric type
     try:
         series = pl.Series("v", raw_values)
@@ -76,12 +79,19 @@ if __name__ == "__main__":
 
         if values.dtype.kind in 'biufc':  # Check if dtype is numeric (int, float, complex)
             is_numeric = True
-
-    if is_numeric:
+    frac_nulls = 0.
+    if not add_noise:
+        frac_nulls = num_trials
+    elif is_numeric:
         # Compute per-coordinate noise scale: variance / (2 * mi)
         arr_2d = np.stack([np.atleast_1d(v) for v in values], axis=-1)
         variances = np.var(arr_2d, axis=1)
+        if np.isnan(variances):
+            variances = np.nanvar(arr_2d, axis=1)
+            logging.info("Output query is sometimes NaN!")
         scale = variances / (2 * mi)
+        assert len(scale) == 1
+        scale = scale[0]
 
         logging.info("Stacked array shape: %s", arr_2d.shape)
         logging.info("Calculated variances: %s", variances)
@@ -90,34 +100,66 @@ if __name__ == "__main__":
             "Numeric type '%s' detected. Processing %d numeric samples.",
             dtype_str, len(values)
         )
+        for _ in range(num_trials):
+
+
+            # Choose a sample at random
+            frac_samples = len(values) / sample_size
+            logging.info(f'frac_samples: {frac_samples}')
+            if frac_samples > 1:
+                assert(False)
+            if np.random.rand() < frac_samples:
+                sample = np.random.choice(values)
+            else:
+                sample = np.nan
+
+
+            if add_noise and not np.isnan(sample):
+                # Compute noise for numeric types
+                # Ensure scale is a valid float or array of floats
+                if scale is None or np.any(np.isnan(scale)):
+                    logging.error("Noise scale is invalid (None or NaN).")
+                    sys.exit(1)
+                noise = np.random.normal(loc=0, scale=np.sqrt(scale))
+                release = sample + noise
+                releases.append(release)
+            else:
+                if np.isnan(sample):
+                    sample = None
+                    frac_nulls += 1
+                release = None
+                noise = None
+
+            logging.info(
+                "Selected sample: %s; noise: %s; release: %s",
+                sample, noise, release
+            )
     else:
-        # Nothing to do for non-numeric types
-        pass
+        noise = 'uniform'
+        unique_values = list(set(values))
+        logging.info("Num unique values: %s", len(unique_values))
+        for _ in range(num_trials):
+            # Choose a sample at random
+            frac_samples = len(values) / sample_size
+            if frac_samples > 1:
+                assert(False)
+            logging.info(f'frac_samples: {frac_samples}')
+            if np.random.rand() < frac_samples:
+                sample = np.random.choice(values)
+            else:
+                sample = None
 
-        logging.info(
-            "Non-numeric type '%s' detected. Processing %d categorical values.",
-            dtype_str, len(values)
-        )
+            if sample is not None:
+                release = np.random.choice(unique_values)
+                releases.append(release)
+            else:
+                frac_nulls += 1
+                release = None
 
-    # Choose a sample at random
-    sample = np.random.choice(values)
-
-    # Compute noise for numeric types, none otherwise
-    if is_numeric:
-        # Ensure scale is a valid float or array of floats
-        if scale is None or np.any(np.isnan(scale)):
-            logging.error("Noise scale is invalid (None or NaN).")
-            sys.exit(1)
-        noise = np.random.normal(loc=0, scale=np.sqrt(scale))
-        release = sample + noise
-    else:
-        noise = None
-        release = sample
-
-    logging.info(
-        "Selected sample: %s; noise: %s; release: %s",
-        sample, noise, release
-    )
+            logging.info(
+                "Selected sample: %s; noise: %s; release: %s",
+                sample, noise, release
+            )
 
     class CustomEncoder(json.JSONEncoder):
         def default(self, obj):
@@ -132,7 +174,8 @@ if __name__ == "__main__":
         "col": entry.get("col"),
         "row": entry.get("row"),
         "dtype": dtype_str,
-        "value": release.tolist() if hasattr(release, 'tolist') else release,
+        "value": releases if len(releases) > 0 else [None],
+        "frac_nulls": frac_nulls / num_trials
     }
 
     if args.output_file:
