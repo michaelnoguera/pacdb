@@ -1,0 +1,5 @@
+experiment,step,label,elapsed_time
+ap-duckdb-q1-customer-total,step1,s1_parse_query_file,0.00038123130798339844
+ap-duckdb-q1-customer-total,step1,s1_run_notebook,16.374326944351196
+ap-duckdb-q1-customer-total,step2,s2_run_subprocess,4.685249090194702
+ap-duckdb-q1-customer-total,step3,s3_run_notebook,1.2728331089019775
