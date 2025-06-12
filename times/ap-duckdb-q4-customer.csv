@@ -1,0 +1,11 @@
+ap-duckdb-q4-customer,step1,load_data,0.2908310890197754
+ap-duckdb-q4-customer,step1,create_random_samples_table,1.8903069496154785
+ap-duckdb-q4-customer,step1,prepare_query,0.0013151168823242188
+ap-duckdb-q4-customer,step1,run_query_for_all_samples,8.979331970214844
+ap-duckdb-q4-customer,step1,add_rank_column,0.002646923065185547
+ap-duckdb-q4-customer,step1,save_index_and_output_cols,0.00078582763671875
+ap-duckdb-q4-customer,step1,drop_sample_and_group_by,0.008857011795043945
+ap-duckdb-q4-customer,step1,get_all_groups,0.0001850128173828125
+ap-duckdb-q4-customer,step1,save_template,0.0024919509887695312
+ap-duckdb-q4-customer,step1,write_json_files,0.0030701160430908203
+ap-duckdb-q4-customer,step1,zip_output_dir,2.1002697944641113
