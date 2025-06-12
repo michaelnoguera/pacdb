@@ -1,11 +1,12 @@
 import argparse
+import datetime
 import os
 import subprocess
+import time
 
 import parse
-import time
-import datetime
 
+from timer import Timer
 
 QUERYFOLDER = "./queries"
 
@@ -27,11 +28,12 @@ if __name__ == "__main__":
 
     for query in queries_to_run:
         try:
-            start_time = time.time()
-            start_datetime = datetime.datetime.now()
             print(f"Running query: {query}")
 
             EXPERIMENT = f"ap-duckdb-{query}"
+
+            timer = Timer(experiment=f"{EXPERIMENT}-total", step="step2", output_dir="./times")
+            timer.start("s2_run_subprocess")
             
             OUTPUT_DIR = f"./outputs/{EXPERIMENT}-step3"
             os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -44,11 +46,7 @@ if __name__ == "__main__":
             if args.verbose:
                 cmd.append('-v')
             subprocess.run(cmd)
-            end_time = time.time()
-            end_datetime = datetime.datetime.now()
-            execution_time = end_time - start_time
-            with open('times/step2-execution_time.txt', 'a') as f:
-                f.write(f"{query}: {execution_time}\n")
+            timer.end()
         except Exception as e:
             print(f"Error running query {query}: {e}")
             continue

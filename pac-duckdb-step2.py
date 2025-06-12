@@ -7,6 +7,8 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
+from timer import Timer
+
 # Default max mutual information bound
 DEFAULT_MI = 1/2
 num_trials = 100
@@ -18,7 +20,10 @@ if __name__ == "__main__":
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("input_file", type=Path)
     parser.add_argument("-o", "--output-file", type=Path)
+    parser.add_argument("--experiment", type=str, default="unknown_experiment")
+    parser.add_argument("--step", type=str, default="step2")
     args = parser.parse_args()
+
     # Configure logging level
     logging.basicConfig(
         level=logging.INFO if args.verbose else logging.WARNING,
@@ -33,7 +38,11 @@ if __name__ == "__main__":
         logging.error("Input file '%s' does not exist.", input_path)
         sys.exit(1)
 
+    # Configure timer
+    timer = Timer(experiment=args.experiment, step=args.step, output_dir="./times")
+
     # Load and parse JSON entry
+    timer.start("load_json")
     try:
         with input_path.open("r", encoding="utf-8") as f:
             data = json.load(f)
@@ -79,10 +88,14 @@ if __name__ == "__main__":
 
         if values.dtype.kind in 'biufc':  # Check if dtype is numeric (int, float, complex)
             is_numeric = True
+    timer.end()
+
+    timer.start("compute_variance_and_release")
     frac_nulls = 0.
     if not add_noise:
         frac_nulls = num_trials
     elif is_numeric:
+        
         # Compute per-coordinate noise scale: variance / (2 * mi)
         arr_2d = np.stack([np.atleast_1d(v) for v in values], axis=-1)
         variances = np.var(arr_2d, axis=1)
@@ -100,6 +113,7 @@ if __name__ == "__main__":
             "Numeric type '%s' detected. Processing %d numeric samples.",
             dtype_str, len(values)
         )
+
         for _ in range(num_trials):
 
 
@@ -160,6 +174,7 @@ if __name__ == "__main__":
                 "Selected sample: %s; noise: %s; release: %s",
                 sample, noise, release
             )
+    timer.end()
 
     class CustomEncoder(json.JSONEncoder):
         def default(self, obj):
@@ -170,6 +185,7 @@ if __name__ == "__main__":
                 return str(obj)
 
     # Prepare output JSON
+    timer.start("write_json")
     output = {
         "col": entry.get("col"),
         "row": entry.get("row"),
@@ -183,4 +199,4 @@ if __name__ == "__main__":
             json.dump(output, f, indent=4, cls=CustomEncoder)
     else:
         print(json.dumps(output, indent=4, cls=CustomEncoder))
-
+    timer.end()

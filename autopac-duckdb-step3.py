@@ -1,9 +1,10 @@
 import os
 import pickle
 
-import polars as pl
 import papermill as pm
 import parse
+
+from timer import Timer
 
 QUERYFOLDER = "./queries"
 
@@ -34,6 +35,8 @@ for query in queries_to_run:
         # INDEX_COLS = ['l_returnflag', 'l_linestatus']
         # OUTPUT_COLS = ['sum_qty', 'sum_base_price', 'sum_disc_price', 'sum_charge', 'avg_qty', 'avg_price', 'avg_disc', 'count_order']
 
+        timer = Timer(experiment=f"{EXPERIMENT}-total", step="step3", output_dir="./times")
+        timer.start("s3_run_notebook")
         # run the notebook with these parameters
         pm.execute_notebook(
             "autopac-duckdb-step3.ipynb",
@@ -47,7 +50,7 @@ for query in queries_to_run:
                 templatedf_path=templatedf_path
             ),
         )
-
+        timer.end()
     except Exception as e:
         print(f"Error running query {query}: {e}")
         continue
