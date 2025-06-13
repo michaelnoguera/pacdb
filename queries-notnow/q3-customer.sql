@@ -1,6 +1,6 @@
 --var:SAMPLES = 1024
---var:INDEX_COLS = ['l_orderkey','o_orderdate','o_shippriority']
---var:OUTPUT_COLS = ['revenue']
+--var:INDEX_COLS = []
+--var:OUTPUT_COLS = ['l_orderkey','o_orderdate','o_shippriority', 'revenue']
 
 --begin SAMPLE_STEP--
 DROP TABLE IF EXISTS random_samples;

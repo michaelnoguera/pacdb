@@ -86,8 +86,11 @@ if __name__ == "__main__":
         # Compute per-coordinate noise scale: variance / (2 * mi)
         arr_2d = np.stack([np.atleast_1d(v) for v in values], axis=-1)
         variances = np.var(arr_2d, axis=1)
+        # print(values)
+        # print(variances)
         if np.isnan(variances):
             variances = np.nanvar(arr_2d, axis=1)
+            assert(False)
             logging.info("Output query is sometimes NaN!")
         scale = variances / (2 * mi)
         assert len(scale) == 1
