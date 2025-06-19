@@ -2,6 +2,10 @@ import os
 
 import papermill as pm
 import parse
+import time
+import datetime
+
+from timer import Timer
 
 QUERYFOLDER = "./queries"
 
@@ -16,11 +20,11 @@ for queryfile in os.listdir(QUERYFOLDER):
 
 for query in queries_to_run:
     try:
-        print(f"Running query: {query}")
-
         QUERY = query
         QUERYFILE = f"./{QUERYFOLDER}/{QUERY}.sql"
 
+        timer = Timer(experiment=f"ap-duckdb-{QUERY}-total", step="step1", output_dir="./times")
+        timer.start("s1_parse_query_file")
         # In the queryfile, there are "--begin SAMPLE_STEP--" and "--end SAMPLE_STEP--" comments delimiting the SAMPLE_STEP and the PREPARE_STEP.
         # Extract the SQL code between these comments into variables SAMPLE_STEP and PREPARE_STEP respectively.
         query_strings = {}
@@ -47,6 +51,8 @@ for query in queries_to_run:
         query_strings["sample"] = query_strings["sample"].replace("1024//2", f"{SAMPLES // 2}")
         query_strings["prepare"] = query_strings["prepare"].replace("1024//2", f"{SAMPLES // 2}")
 
+        timer.end()  # End the timer for parsing the query
+        timer.start("s1_run_notebook")
         EXPERIMENT = f"ap-duckdb-{QUERY}"
         OUTPUT_DIR = f"./outputs/{EXPERIMENT}-step1"
 
@@ -69,7 +75,7 @@ for query in queries_to_run:
                 OUTPUT_COLS=query_strings["OUTPUT_COLS"],
             ),
         )
-
+        timer.end()
     except Exception as e:
         print(f"Error running query {query}: {e}")
         continue

@@ -15,6 +15,8 @@ import subprocess
 
 import parse
 
+from timer import Timer
+
 if __name__ == "__main__":
     # Parse command-line arguments
     parser = argparse.ArgumentParser()
@@ -47,6 +49,8 @@ if __name__ == "__main__":
                 'python3.11', 'pac-duckdb-step2.py',
                 '-mi', str(mi),
                 '-o', os.path.join(OUTPUT_DIR, f"{n}.json"),
+                '--experiment', EXPERIMENT, # used only for timer logging, optional
+                '--step', 'step2', # used only for timer logging, optional
             ]
             if args.verbose:
                 cmd.append('-v')
@@ -56,5 +60,8 @@ if __name__ == "__main__":
             subprocess.run(cmd)
 
     # Zip the output directory
+    timer = Timer(experiment=EXPERIMENT, step='step2', output_dir="./times")
+    timer.start("zip_output")
     logging.info(f'Zipping {OUTPUT_DIR}.')
     shutil.make_archive(OUTPUT_DIR, 'zip', OUTPUT_DIR)
+    timer.end()
