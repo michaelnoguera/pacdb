@@ -22,6 +22,13 @@ strict = false
 ignore_missing_imports = true
 disallow_untyped_defs = false
 
+[tool.harlequin]
+default_profile = "tpch"
+
+[tool.harlequin.profiles.tpch]
+limit = 1000
+conn_str = ["data/tpch/tpch.duckdb"]
+
 [dependency-groups]
 dev = [
     "mypy>=1.15.0",
