@@ -11,7 +11,7 @@ from timer import Timer
 
 # Default max mutual information bound
 DEFAULT_MI = 1/2
-num_trials = 100
+num_trials = 1000
 
 if __name__ == "__main__":
     # Parse command-line arguments

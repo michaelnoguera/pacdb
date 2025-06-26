@@ -1,10 +1,9 @@
 --var:SAMPLES = 1024
---var:INDEX_COLS = ['l_orderkey','o_orderdate','o_shippriority']
---var:OUTPUT_COLS = ['revenue']
+--var:INDEX_COLS = ['o_orderpriority']
+--var:OUTPUT_COLS = ['order_count']
 
 --begin SAMPLE_STEP--
 DROP TABLE IF EXISTS random_samples;
-
 CREATE TABLE random_samples AS
 WITH sample_numbers AS MATERIALIZED (
     SELECT range AS sample_id FROM range(1024)
@@ -23,36 +22,36 @@ SELECT
 FROM random_values
 --end SAMPLE_STEP--
 
+
 --begin PREPARE_STEP--
 DEALLOCATE PREPARE run_query;
 
 PREPARE run_query AS 
 SELECT
-    l_orderkey,
-    sum(l_extendedprice * (1 - l_discount)) AS revenue,
-    o_orderdate,
-    o_shippriority
+    o_orderpriority,
+    count(*) AS order_count
 FROM
+    orders,
     (SELECT * FROM customer
         JOIN random_samples AS rs ON rs.row_id = customer.rowid
         AND rs.random_binary = TRUE
-        AND rs.sample_id = $sample) AS customer,
-    orders,
-    lineitem
+        AND rs.sample_id = $sample) AS customer
 WHERE
-    c_mktsegment = 'BUILDING'
-    AND c_custkey = o_custkey
-    AND l_orderkey = o_orderkey
-    AND o_orderdate < CAST('1995-03-15' AS date)
-    AND l_shipdate > CAST('1995-03-15' AS date)
+    c_custkey = o_custkey
+    AND o_orderdate >= CAST('1993-07-01' AS date)
+    AND o_orderdate < CAST('1993-10-01' AS date)
+    AND EXISTS (
+        SELECT
+            *
+        FROM
+            lineitem
+        WHERE
+            l_orderkey = o_orderkey
+            AND l_commitdate < l_receiptdate)
 GROUP BY
-    l_orderkey,
-    o_orderdate,
-    o_shippriority
+    o_orderpriority
 ORDER BY
-    revenue DESC,
-    o_orderdate;
+    o_orderpriority;
 --end PREPARE_STEP--
-
 
 EXECUTE run_query(sample := 0);

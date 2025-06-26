@@ -4,7 +4,6 @@
 
 --begin SAMPLE_STEP--
 DROP TABLE IF EXISTS random_samples;
-
 CREATE TABLE random_samples AS
 WITH sample_numbers AS MATERIALIZED (
     SELECT range AS sample_id FROM range(1024)
@@ -21,9 +20,7 @@ SELECT
     row_id,
     random_binary
 FROM random_values
-ORDER BY sample_id, row_id;
 --end SAMPLE_STEP--
-
 
 --begin PREPARE_STEP--
 DEALLOCATE PREPARE run_query;

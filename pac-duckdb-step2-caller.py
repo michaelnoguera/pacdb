@@ -35,7 +35,7 @@ if __name__ == "__main__":
 
     EXPERIMENT = args.experiment
     INPUT_DIR = f'./outputs/{EXPERIMENT}-step1/json'
-    OUTPUT_DIR = f'./outputs/{EXPERIMENT}-step2'
+    OUTPUT_DIR = f'./outputs/{EXPERIMENT}-{mi}-step2'
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 

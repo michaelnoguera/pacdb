@@ -5,10 +5,8 @@
 --var:INDEX_COLS = ['l_returnflag', 'l_linestatus']
 --var:OUTPUT_COLS = ['sum_qty', 'sum_base_price', 'sum_disc_price', 'sum_charge', 'avg_qty', 'avg_price', 'avg_disc', 'count_order']
 
-
 --begin SAMPLE_STEP--
 DROP TABLE IF EXISTS random_samples;
-
 CREATE TABLE random_samples AS
 WITH sample_numbers AS MATERIALIZED (
     SELECT range AS sample_id FROM range(1024)
@@ -25,7 +23,6 @@ SELECT
     row_id,
     random_binary
 FROM random_values
-ORDER BY sample_id, row_id;
 --end SAMPLE_STEP--
 
 

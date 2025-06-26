@@ -17,3 +17,6 @@ ap-duckdb-*.ipynb
 
 outputs/*
 .ipynb*
+
+figs/*
+times/*
