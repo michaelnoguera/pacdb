@@ -10,22 +10,34 @@
 DROP TABLE IF EXISTS random_samples;
 
 CREATE TABLE random_samples AS
-WITH selected_rows AS MATERIALIZED (
+WITH shuffled_rows_to_split AS MATERIALIZED (
     SELECT 
         sample_id,
-        array_sort(array_slice(
-            array_agg(customer.rowid ORDER BY RANDOM()),
-            1,
-            (SELECT COUNT(*) / 2 FROM customer)
-        )) AS row_ids
+        array_agg(customer.rowid ORDER BY RANDOM()) AS shuffled_row_ids
     FROM 
-        range(1024) AS t(sample_id)
-    CROSS JOIN
-        customer
-    GROUP BY 
-        sample_id
-    ORDER BY 
-        sample_id
+        customer,
+        range(512) AS t(sample_id)
+    GROUP BY sample_id
+),
+splits AS (
+    SELECT
+        sample_id * 2 AS sample_id_a,
+        sample_id * 2 + 1 AS sample_id_b,
+        shuffled_row_ids[:len(shuffled_row_ids) // 2] AS row_ids_a,
+        shuffled_row_ids[len(shuffled_row_ids) // 2:] AS row_ids_b
+    FROM shuffled_rows_to_split
+),
+selected_rows AS (
+    SELECT
+        sample_id_a AS sample_id,
+        array_sort(row_ids_a) AS row_ids
+    FROM splits
+    UNION ALL
+    SELECT
+        sample_id_b AS sample_id,
+        array_sort(row_ids_b) AS row_ids
+    FROM splits
+    ORDER BY sample_id
 )
 SELECT
     sr.sample_id,
@@ -39,8 +51,8 @@ SELECT
         ELSE FALSE 
     END AS random_binary
 FROM
-    customer
-CROSS JOIN selected_rows AS sr
+    customer,
+    selected_rows AS sr
 ORDER BY
     sr.sample_id,
     customer.rowid;
