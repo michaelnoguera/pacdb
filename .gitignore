@@ -16,4 +16,5 @@ derby.log
 ap-duckdb-*.ipynb
 
 outputs/*
+times/*
 .ipynb*

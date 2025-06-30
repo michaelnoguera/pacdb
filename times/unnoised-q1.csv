@@ -1,2 +1,0 @@
-experiment,step,label,elapsed_time
-unnoised-q1,total,run_sql_file_in_duckdb,0.05843210220336914
