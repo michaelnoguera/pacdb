@@ -24,7 +24,7 @@ def run_batch_pac_noise_step2(
     verbose: bool = False,
 ):
     input_dir = f'./outputs/{experiment}-step1/json'
-    output_dir = f'./outputs/{experiment}-step2'
+    output_dir = f'./outputs/{experiment}-{max_mi}-step2'
     os.makedirs(output_dir, exist_ok=True)
 
     pattern = parse.compile("{n}.json")
