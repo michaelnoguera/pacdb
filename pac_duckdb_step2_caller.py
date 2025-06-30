@@ -1,9 +1,9 @@
 # for all files in ./outputs/{EXPERIMENT}-step1/json/{n}.json
-# run the script pac-duckdb-step2.py
+# run the script pac_duckdb_step2.py
 
 """
 Usage:
-python3.11 pac-duckdb-step2-caller.py -e pac-duckdb-q1 -mi 0.125
+python3.11 pac_duckdb_step2_caller.py -e pac-duckdb-q1 -mi 0.125
 """
 
 
@@ -46,7 +46,7 @@ if __name__ == "__main__":
             n = result['n']
 
             cmd = [
-                'python3.11', 'pac-duckdb-step2.py',
+                'python3.11', 'pac_duckdb_step2.py',
                 '-mi', str(mi),
                 '-o', os.path.join(OUTPUT_DIR, f"{n}.json"),
                 '--experiment', EXPERIMENT, # used only for timer logging, optional

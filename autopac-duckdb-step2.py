@@ -39,7 +39,7 @@ if __name__ == "__main__":
             os.makedirs(OUTPUT_DIR, exist_ok=True)
 
             cmd = [
-                'python3.11', 'pac-duckdb-step2-caller.py', 
+                'python3.11', 'pac_duckdb_step2_caller.py', 
                 '-e', EXPERIMENT,
                 '-mi', str(mi),
             ]
