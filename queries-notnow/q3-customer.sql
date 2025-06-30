@@ -21,6 +21,7 @@ SELECT
     row_id,
     random_binary
 FROM random_values
+ORDER BY sample_id, row_id;
 --end SAMPLE_STEP--
 
 --begin PREPARE_STEP--
