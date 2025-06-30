@@ -48,30 +48,15 @@ class Timer:
             self.writer.writerow(["experiment", "step", "label", "elapsed_time"])  # Write header if file is new
             self._file_handle.flush()
 
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s | %(filename)s:%(lineno)d %(levelname)s %(message)s"
-        )
-
     def start(self, label: str):
-        """Start timing with a given label."""
-        logging.debug(f"Starting timer {label}")
         self.state.label = label
         self.state.start = time.time()
 
-    def end(self) -> float:
-        """Stop timing and record the elapsed time and corresponding label. Writes to CSV."""
-        logging.debug(f"Ending timer {self.state.label}")
-        if not self.state.label:
-            raise ValueError("Timer has not been started. Call start() before end().")
+    def end(self):
         self.state.end = time.time()
-        elapsed_time = self.state.end - self.state.start
-        logging.info(f"Elapsed time for {self.state.label}: {elapsed_time:.2f} seconds")
-
-        assert self.writer is not None, "TimerState writer is not initialized"
-        self.writer.writerow([self.config.experiment, self.config.step, self.state.label, elapsed_time])
-        
-        return elapsed_time
+        self.writer.writerow([self.config.experiment, self.config.step, self.state.label, self.state.end-self.state.start])
+        self.state.label = ""
+        self.state.start, self.state.end = 0.0, 0.0
 
     @property
     def timer_context(self):
