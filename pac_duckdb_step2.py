@@ -11,7 +11,7 @@ from timer import Timer
 
 # Default max mutual information bound
 DEFAULT_MI = 1/2
-NUM_TRIALS = 100
+NUM_TRIALS = 1000
 
 class CustomEncoder(json.JSONEncoder):
     def default(self, obj):
