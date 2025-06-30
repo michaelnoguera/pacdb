@@ -1,8 +1,8 @@
 import argparse
 import json
 import logging
-import sys
 from pathlib import Path
+from typing import Optional, Union
 
 import numpy as np
 import polars as pl
@@ -11,45 +11,44 @@ from timer import Timer
 
 # Default max mutual information bound
 DEFAULT_MI = 1/2
-num_trials = 100
+NUM_TRIALS = 100
 
-if __name__ == "__main__":
-    # Parse command-line arguments
-    parser = argparse.ArgumentParser(description="Add PAC noise to a sample from input JSON values.")
-    parser.add_argument("-mi", "--max-mi", type=float, default=DEFAULT_MI)
-    parser.add_argument("-v", "--verbose", action="store_true")
-    parser.add_argument("input_file", type=Path)
-    parser.add_argument("-o", "--output-file", type=Path)
-    parser.add_argument("--experiment", type=str, default="unknown_experiment")
-    parser.add_argument("--step", type=str, default="step2")
-    args = parser.parse_args()
+class CustomEncoder(json.JSONEncoder):
+    def default(self, obj):
+        try:
+            return super().default(obj)
+        except TypeError:
+            return str(obj)
 
+def add_pac_noise_to_sample(
+    input_path: Union[str, Path],
+    max_mi: float = DEFAULT_MI,
+    verbose: bool = False,
+    output_path: Optional[Union[str, Path]] = None,
+    experiment: str = "unknown_experiment",
+    step: str = "step2",
+) -> dict:
     # Configure logging level
     logging.basicConfig(
-        level=logging.INFO if args.verbose else logging.WARNING,
+        level=logging.INFO if verbose else logging.WARNING,
         format="%(asctime)s | %(filename)s:%(lineno)d %(levelname)s %(message)s"
     )
 
-    mi = args.max_mi
-    input_path = args.input_file
+    mi = max_mi
+    input_path = Path(input_path)
 
     # Validate input file exists
     if not input_path.exists():
-        logging.error("Input file '%s' does not exist.", input_path)
-        sys.exit(1)
+        raise FileNotFoundError(f"Input file '{input_path}' does not exist.")
 
     # Configure timer
-    timer = Timer(experiment=args.experiment, step=args.step, output_dir="./times")
+    timer = Timer(experiment=experiment, step=step, output_dir="./times")
 
     # Load and parse JSON entry
     timer.start("load_json")
-    try:
-        with input_path.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-        entry = data[0]
-    except (json.JSONDecodeError, IndexError) as e:
-        logging.error("Failed to read or parse '%s': %s", input_path, e)
-        sys.exit(1)
+    with input_path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    entry = data[0]
 
     # Read values and dtype from JSON
     dtype_str = entry.get("dtype", "")
@@ -79,21 +78,15 @@ if __name__ == "__main__":
 
         values = series.to_numpy()
     except Exception:
-        logging.warning(
-            "Failed to cast values to Polars Series with dtype '%s'. Attempting numpy conversion.",
-            dtype_str
-        )
-
+        logging.warning("Polars cast failed. Attempting numpy conversion.")
         values = np.array(raw_values)
-
-        if values.dtype.kind in 'biufc':  # Check if dtype is numeric (int, float, complex)
-            is_numeric = True
+        is_numeric = values.dtype.kind in 'biufc'
     timer.end()
 
     timer.start("compute_variance_and_release")
-    frac_nulls = 0.
+    frac_nulls = 0
     if not add_noise:
-        frac_nulls = num_trials
+        frac_nulls = NUM_TRIALS
     elif is_numeric:
         
         # Compute per-coordinate noise scale: variance / (2 * mi)
@@ -114,7 +107,7 @@ if __name__ == "__main__":
             dtype_str, len(values)
         )
 
-        for _ in range(num_trials):
+        for _ in range(NUM_TRIALS):
 
 
             # Choose a sample at random
@@ -132,8 +125,7 @@ if __name__ == "__main__":
                 # Compute noise for numeric types
                 # Ensure scale is a valid float or array of floats
                 if scale is None or np.any(np.isnan(scale)):
-                    logging.error("Noise scale is invalid (None or NaN).")
-                    sys.exit(1)
+                    raise ValueError("Noise scale is invalid (None or NaN).")
                 noise = np.random.normal(loc=0, scale=np.sqrt(scale))
                 release = sample + noise
                 releases.append(release)
@@ -152,7 +144,7 @@ if __name__ == "__main__":
         noise = 'uniform'
         unique_values = list(set(values))
         logging.info("Num unique values: %s", len(unique_values))
-        for _ in range(num_trials):
+        for _ in range(NUM_TRIALS):
             # Choose a sample at random
             frac_samples = len(values) / sample_size
             if frac_samples > 1:
@@ -176,27 +168,41 @@ if __name__ == "__main__":
             )
     timer.end()
 
-    class CustomEncoder(json.JSONEncoder):
-        def default(self, obj):
-            # in order to put arbitrary values back into JSON, convert them to strings if needed
-            try:
-                return super().default(obj)
-            except TypeError:
-                return str(obj)
-
-    # Prepare output JSON
     timer.start("write_json")
     output = {
         "col": entry.get("col"),
         "row": entry.get("row"),
         "dtype": dtype_str,
         "value": releases if len(releases) > 0 else [None],
-        "frac_nulls": frac_nulls / num_trials
+        "frac_nulls": frac_nulls / NUM_TRIALS
     }
 
-    if args.output_file:
-        with args.output_file.open("w", encoding="utf-8") as f:
+    if output_path:
+        output_path = Path(output_path)
+        with output_path.open("w", encoding="utf-8") as f:
             json.dump(output, f, indent=4, cls=CustomEncoder)
-    else:
-        print(json.dumps(output, indent=4, cls=CustomEncoder))
     timer.end()
+
+    return output
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Add PAC noise to a sample from input JSON values.")
+    parser.add_argument("-mi", "--max-mi", type=float, default=DEFAULT_MI)
+    parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument("input_file", type=Path)
+    parser.add_argument("-o", "--output-file", type=Path)
+    parser.add_argument("--experiment", type=str, default="unknown_experiment")
+    parser.add_argument("--step", type=str, default="step2")
+    args = parser.parse_args()
+
+    result = add_pac_noise_to_sample(
+        input_path=args.input_file,
+        max_mi=args.max_mi,
+        verbose=args.verbose,
+        output_path=args.output_file,
+        experiment=args.experiment,
+        step=args.step
+    )
+
+    if not args.output_file:
+        print(json.dumps(result, indent=4, cls=CustomEncoder))

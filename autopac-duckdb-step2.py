@@ -1,24 +1,23 @@
-import argparse
-import datetime
+import logging
 import os
-import subprocess
-import time
 
 import parse
 
+from pac_duckdb_step2_caller import run_batch_pac_noise_step2
 from timer import Timer
 
 QUERYFOLDER = "./queries"
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-mi", "--mi", type=float, required=False, help="MI value")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
-    args = parser.parse_args()
+def main(mi: float, verbose: bool):
+    """
+    Run PAC noise step2 for all queries in the queries folder.
 
-    mi: float = args.mi or 1/2
+    Args:
+        mi (float): Max mutual information bound.
+        verbose (bool): Whether to enable verbose logging.
+    """
 
-    queries_to_run = []  # get filenames matching ./queries/{query}.sql
+    queries_to_run = []
     pattern = parse.compile("{q}.sql")
     for queryfile in os.listdir(QUERYFOLDER):
         result = pattern.parse(queryfile)
@@ -27,26 +26,34 @@ if __name__ == "__main__":
             queries_to_run.append(query)
 
     for query in queries_to_run:
-        try:
-            print(f"Running query: {query}")
+        print(f"Running query: {query}")
 
-            EXPERIMENT = f"ap-duckdb-{query}"
+        EXPERIMENT = f"ap-duckdb-{query}"
 
-            timer = Timer(experiment=f"{EXPERIMENT}-total", step="step2", output_dir="./times")
-            timer.start("s2_run_subprocess")
-            
-            OUTPUT_DIR = f"./outputs/{EXPERIMENT}-step3"
-            os.makedirs(OUTPUT_DIR, exist_ok=True)
+        timer = Timer(experiment=f"{EXPERIMENT}-total", step="step2", output_dir="./times")
+        timer.start("s2_run_batch")
 
-            cmd = [
-                'python3.11', 'pac_duckdb_step2_caller.py', 
-                '-e', EXPERIMENT,
-                '-mi', str(mi),
-            ]
-            if args.verbose:
-                cmd.append('-v')
-            subprocess.run(cmd)
-            timer.end()
-        except Exception as e:
-            print(f"Error running query {query}: {e}")
-            continue
+        os.makedirs(f"./outputs/{EXPERIMENT}-step3", exist_ok=True)
+
+        run_batch_pac_noise_step2(
+            experiment=EXPERIMENT,
+            max_mi=mi,
+            verbose=verbose
+        )
+
+        timer.end()
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-mi", "--mi", type=float, default=0.5, help="MI value (default: 0.5)")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
+    args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(asctime)s | %(filename)s:%(lineno)d %(levelname)s %(message)s"
+    )
+    
+    main(mi=args.mi, verbose=args.verbose)

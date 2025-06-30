@@ -11,57 +11,62 @@ import argparse
 import logging
 import os
 import shutil
-import subprocess
 
 import parse
 
+from pac_duckdb_step2 import add_pac_noise_to_sample
 from timer import Timer
+
+
+def run_batch_pac_noise_step2(
+    experiment: str,
+    max_mi: float = 0.25,
+    verbose: bool = False,
+):
+    input_dir = f'./outputs/{experiment}-step1/json'
+    output_dir = f'./outputs/{experiment}-step2'
+    os.makedirs(output_dir, exist_ok=True)
+
+    pattern = parse.compile("{n}.json")
+    for filename in os.listdir(input_dir):
+        result = pattern.parse(filename)
+        if result:
+            n = result['n']
+            input_file = os.path.join(input_dir, filename)
+            output_file = os.path.join(output_dir, f"{n}.json")
+
+            logging.info(f"Processing {input_file} -> {output_file}")
+            add_pac_noise_to_sample(
+                input_path=input_file,
+                max_mi=max_mi,
+                verbose=verbose,
+                output_path=output_file,
+                experiment=experiment,
+                step="step2"
+            )
+
+    # Zip the output directory
+    timer = Timer(experiment=experiment, step='step2', output_dir="./times")
+    timer.start("zip_output")
+    logging.info(f'Zipping {output_dir}.')
+    shutil.make_archive(output_dir, 'zip', output_dir)
+    timer.end()
 
 if __name__ == "__main__":
     # Parse command-line arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--experiment", type=str, required=True, help="Experiment name")
-    parser.add_argument("-mi", "--mi", type=float, required=False, help="MI value")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
+    parser.add_argument("-mi", "--mi", type=float, required=False, default=0.25, help="MI value (default: 0.25)")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
     args = parser.parse_args()
 
-    # Configure logging level
     logging.basicConfig(
         level=logging.INFO if args.verbose else logging.WARNING,
         format="%(asctime)s | %(filename)s:%(lineno)d %(levelname)s %(message)s"
     )
 
-    mi: float = args.mi or 1/4
-
-    EXPERIMENT = args.experiment
-    INPUT_DIR = f'./outputs/{EXPERIMENT}-step1/json'
-    OUTPUT_DIR = f'./outputs/{EXPERIMENT}-step2'
-
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-    pattern = parse.compile("{n}.json")
-    for filename in os.listdir(INPUT_DIR):
-        result = pattern.parse(filename)
-        if result:
-            n = result['n']
-
-            cmd = [
-                'python3.11', 'pac_duckdb_step2.py',
-                '-mi', str(mi),
-                '-o', os.path.join(OUTPUT_DIR, f"{n}.json"),
-                '--experiment', EXPERIMENT, # used only for timer logging, optional
-                '--step', 'step2', # used only for timer logging, optional
-            ]
-            if args.verbose:
-                cmd.append('-v')
-            cmd.append(os.path.join(INPUT_DIR, f"{n}.json"))
-
-            logging.info(f'Running "{" ".join(cmd)}"')
-            subprocess.run(cmd)
-
-    # Zip the output directory
-    timer = Timer(experiment=EXPERIMENT, step='step2', output_dir="./times")
-    timer.start("zip_output")
-    logging.info(f'Zipping {OUTPUT_DIR}.')
-    shutil.make_archive(OUTPUT_DIR, 'zip', OUTPUT_DIR)
-    timer.end()
+    run_batch_pac_noise_step2(
+        experiment=args.experiment,
+        max_mi=args.mi,
+        verbose=args.verbose
+    )
