@@ -6,9 +6,9 @@
 # ///
 
 import argparse
+import json
 import subprocess
-
-from timer import Timer
+import time
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate TPC-H queries for DuckDB.")
@@ -16,6 +16,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     query_numbers = args.query if args.query else range(1, 23)
+    times = []
 
     for i in query_numbers:
         EXPERIMENT = f"unnoised-q{i}"
@@ -24,8 +25,16 @@ if __name__ == "__main__":
 PRAGMA tpch({i}); -- https://duckdb.org/docs/stable/extensions/tpch.html
 .exit"""
             f.write(query)
-        timer = Timer(EXPERIMENT, "total", "./times")
-        timer.start("run_sql_file_in_duckdb")
+
+        start = time.time()
         p = subprocess.run(f"uvx duckdb ./data/tpch/tpch.duckdb < ./unnoised/q{i}.sql > ./unnoised/q{i}.csv", shell=True, check=True)
-        timer.end()
+        stop = time.time()
+        elapsed = stop - start
+        times.append({
+            "query": f"Q{i}",
+            "total": elapsed,
+        })
+        
         subprocess.run(f"rm ./unnoised/q{i}.sql", shell=True)
+    
+    json.dump(times, open("./unnoised/times.json", "w"), indent=4)

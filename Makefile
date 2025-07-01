@@ -8,4 +8,6 @@ clean:
 	mkdir outputs
 	rm -r times
 	mkdir times
+	rm -r benchmarks
+	mkdir benchmarks
 	rm ap-duckdb-q[0-9]-customer-step[0-9].ipynb ap-duckdb-q[0-9][0-9]-customer-step[0-9].ipynb
