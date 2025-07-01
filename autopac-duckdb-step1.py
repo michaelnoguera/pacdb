@@ -2,8 +2,6 @@ import os
 
 import papermill as pm
 import parse
-import time
-import datetime
 
 from timer import Timer
 
