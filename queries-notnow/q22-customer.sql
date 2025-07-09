@@ -1,4 +1,4 @@
---var:SAMPLES = 1024
+--var:SAMPLES = 128
 --var:INDEX_COLS = ['cntrycode']
 --var:OUTPUT_COLS = ['numcust', 'totacctbal']
 
@@ -7,7 +7,7 @@ DROP TABLE IF EXISTS random_samples;
 
 CREATE TABLE random_samples AS
 WITH sample_numbers AS MATERIALIZED (
-    SELECT range AS sample_id FROM range(1024)
+    SELECT range AS sample_id FROM range(128)
 ), random_values AS MATERIALIZED (
     SELECT 
         sample_numbers.sample_id,
