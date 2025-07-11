@@ -5,6 +5,7 @@ requires-python = ">=3.11"
 dependencies = [
     "duckdb>=1.2.2",
     "ipykernel>=6.29.5",
+    "matplotlib>=3.10.3",
     "numpy>=2.2.5",
     "papermill>=2.6.0",
     "parse>=1.20.2",
