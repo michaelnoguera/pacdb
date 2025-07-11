@@ -10,12 +10,10 @@ python3.11 pac_duckdb_step2_caller.py -e pac-duckdb-q1 -mi 0.125
 import argparse
 import logging
 import os
-import shutil
 
 import parse
 
 from pac_duckdb_step2 import add_pac_noise_to_sample
-from timer import Timer
 
 
 def run_batch_pac_noise_step2(
@@ -44,13 +42,6 @@ def run_batch_pac_noise_step2(
                 experiment=experiment,
                 step="step2"
             )
-
-    # Zip the output directory
-    timer = Timer(experiment=experiment, step='step2', output_dir="./times")
-    timer.start("zip_output")
-    logging.info(f'Zipping {output_dir}.')
-    shutil.make_archive(output_dir, 'zip', output_dir)
-    timer.end()
 
 if __name__ == "__main__":
     # Parse command-line arguments

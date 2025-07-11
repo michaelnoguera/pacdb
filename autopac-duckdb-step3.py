@@ -34,7 +34,7 @@ for query, mi in queries_to_run:
     EXPERIMENT = f"ap-duckdb-{query}"
     OUTPUT_DIR = f"./outputs/{EXPERIMENT}-{mi}-step3"
 
-    INPUT_ZIP = f"./outputs/{EXPERIMENT}-{mi}-step2.zip"
+    INPUT_DIR = f"./outputs/{EXPERIMENT}-{mi}-step2"
 
     INDEX_COLS = pickle.load(open(f'./outputs/{EXPERIMENT}-step1/INDEX_COLS.pkl', 'rb'))
     OUTPUT_COLS = pickle.load(open(f'./outputs/{EXPERIMENT}-step1/OUTPUT_COLS.pkl', 'rb'))
@@ -51,7 +51,7 @@ for query, mi in queries_to_run:
         parameters=dict(
             EXPERIMENT=EXPERIMENT,
             OUTPUT_DIR=OUTPUT_DIR,
-            INPUT_ZIP=INPUT_ZIP,
+            INPUT_DIR=INPUT_DIR,
             INDEX_COLS=INDEX_COLS,
             OUTPUT_COLS=OUTPUT_COLS,
             templatedf_path=templatedf_path
