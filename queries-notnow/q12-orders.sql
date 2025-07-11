@@ -46,15 +46,14 @@ SELECT
             0
         END) AS low_line_count
 FROM
-    orders,
-    lineitem,
     customer,
-    random_samples AS rs
+    lineitem,
+    (SELECT * FROM orders
+        JOIN random_samples AS rs ON rs.row_id = orders.rowid
+        AND rs.random_binary = TRUE
+        AND rs.sample_id = $sample) AS orders,
 WHERE
-    rs.row_id = orders.rowid
-    AND rs.random_binary = TRUE
-    AND rs.sample_id = $sample
-    AND o_custkey = c_custkey
+    o_custkey = c_custkey
     AND o_orderkey = l_orderkey
     AND l_shipmode IN ('MAIL', 'SHIP')
     AND l_commitdate < l_receiptdate

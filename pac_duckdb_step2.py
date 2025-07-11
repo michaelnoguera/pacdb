@@ -54,15 +54,6 @@ def add_pac_noise_to_sample(
     dtype_str = entry.get("dtype", "")
     raw_values = entry.get("values", [])
 
-    sample_size = entry.get("samples", 0)
-    add_noise = True 
-    if len(raw_values) < sample_size:
-        logging.warn("Sample size (%d) is larger than the number of values (%d).", sample_size, len(raw_values))
-        # if len(raw_values) < sample_size/2:
-        add_noise = False # always return None
-
-    releases = []
-    scale = None
     # Determine if numeric type
     try:
         series = pl.Series("v", raw_values)
@@ -81,6 +72,19 @@ def add_pac_noise_to_sample(
         logging.warning("Polars cast failed. Attempting numpy conversion.")
         values = np.array(raw_values)
         is_numeric = values.dtype.kind in 'biufc'
+    if is_numeric:
+        values = [k for k in values if not np.isnan(k)] # only one output col
+
+    sample_size = entry.get("samples", 0)
+    add_noise = True 
+    if len(values) < sample_size:
+        logging.warn("Sample size (%d) is larger than the number of values (%d).", sample_size, len(values))
+        # if len(raw_values) < sample_size/2:
+        add_noise = False # always return None
+
+    releases = []
+    scale = None
+
     timer.end()
 
     timer.start("compute_variance_and_release")
