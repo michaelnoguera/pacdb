@@ -29,6 +29,7 @@ WHERE random_binary = TRUE
 ORDER BY sample_id, row_id;
 --end SAMPLE_STEP--
 
+--begin PREPARE_STEP--
 --.timer off
 DROP TABLE IF EXISTS prejoined;
 
@@ -71,7 +72,7 @@ FROM
 JOIN
     prejoined ON rs.row_id = prejoined.customer_row_id
 WHERE
-    rs.sample_id = $sample
+    rs.sample_id = $sample::INT
 GROUP BY
     n_name
 ORDER BY
