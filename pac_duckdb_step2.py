@@ -57,7 +57,7 @@ def add_pac_noise_to_sample(
     sample_size = entry.get("samples", 0)
     add_noise = True 
     if len(raw_values) < sample_size:
-        logging.warn("Sample size (%d) is larger than the number of values (%d).", sample_size, len(raw_values))
+        logging.info("Sample size (%d) is larger than the number of values (%d).", sample_size, len(raw_values))
         # if len(raw_values) < sample_size/2:
         add_noise = False # always return None
 

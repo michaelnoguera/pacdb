@@ -1,6 +1,10 @@
 import os
 import pickle
+from contextlib import redirect_stdout
 
+
+import nbconvert
+import nbformat
 import papermill as pm
 import parse
 
@@ -44,10 +48,15 @@ for query, mi in queries_to_run:
 
     timer = Timer(experiment=f"{EXPERIMENT}-total", step="step3", output_dir="./times")
     timer.start(f"s3_run_notebook {mi}")
+
     # run the notebook with these parameters
+    notebook_path = f"./{EXPERIMENT}-{mi}-step3.ipynb"
+    script_path = notebook_path.replace(".ipynb", ".py")
+
     pm.execute_notebook(
         "autopac-duckdb-step3.ipynb",
         f"./{EXPERIMENT}-{mi}-step3.ipynb",
+        prepare_only=True,
         parameters=dict(
             EXPERIMENT=EXPERIMENT,
             OUTPUT_DIR=OUTPUT_DIR,
@@ -57,4 +66,18 @@ for query, mi in queries_to_run:
             templatedf_path=templatedf_path
         ),
     )
+
+    # Convert the notebook to a Python script
+    exporter = nbconvert.PythonExporter()
+    with open(notebook_path, "r", encoding="utf-8") as nb_file:
+        notebook_content = nb_file.read()
+        nb_node = nbformat.reads(notebook_content, as_version=4)
+        script_body, _ = exporter.from_notebook_node(nb_node)
+        with open(script_path, "w", encoding="utf-8") as script_file:
+            script_file.write(script_body)
+
+    # Run the script
+    output_file = os.path.join(OUTPUT_DIR, "step3_stdout.txt")
+    with open(output_file, "w") as f, redirect_stdout(f):
+        exec(script_body)
     timer.end()

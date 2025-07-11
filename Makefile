@@ -19,10 +19,13 @@ benchmark:
 	' benchmarks/*.sql.json > benchmarks/merged.json
 
 clean:
-	rm -r outputs
-	mkdir outputs
-	rm -r times
-	mkdir times
-	rm -r benchmarks
-	mkdir benchmarks
-	rm ap-duckdb-q[0-9]-customer-step[0-9].ipynb ap-duckdb-q[0-9][0-9]-customer-step[0-9].ipynb
+	rm -r outputs || true
+	mkdir outputs || true
+	rm -r times || true
+	mkdir times || true
+	rm -r benchmarks || true
+	mkdir benchmarks || true
+	find . -maxdepth 1 -name 'ap-duckdb-*step1.ipynb' -exec rm {} + || true
+	find . -maxdepth 1 -name 'ap-duckdb-*step1.py' -exec rm {} + || true
+	find . -maxdepth 1 -name 'ap-duckdb-*step3.ipynb' -exec rm {} + || true
+	find . -maxdepth 1 -name 'ap-duckdb-*step3.py' -exec rm {} + || true

@@ -1,5 +1,8 @@
 import os
+from contextlib import redirect_stdout
 
+import nbconvert
+import nbformat
 import papermill as pm
 import parse
 
@@ -60,9 +63,14 @@ for query in queries_to_run:
         # OUTPUT_COLS = ['sum_qty', 'sum_base_price', 'sum_disc_price', 'sum_charge', 'avg_qty', 'avg_price', 'avg_disc', 'count_order']
 
         # run the notebook with these parameters
+        notebook_path = f"./{EXPERIMENT}-step1.ipynb"
+        script_path = notebook_path.replace(".ipynb", ".py")
+
+        # Prepare the notebook with papermill
         pm.execute_notebook(
             "autopac-duckdb-step1.ipynb",
-            f"./{EXPERIMENT}-step1.ipynb",
+            notebook_path,
+            prepare_only=True, # faster to run outside of ipython, so we only generate the notebook
             parameters=dict(
                 EXPERIMENT=EXPERIMENT,
                 OUTPUT_DIR=OUTPUT_DIR,
@@ -73,7 +81,22 @@ for query in queries_to_run:
                 OUTPUT_COLS=query_strings["OUTPUT_COLS"],
             ),
         )
+
+        # Convert the notebook to a Python script
+        exporter = nbconvert.PythonExporter()
+        with open(notebook_path, "r", encoding="utf-8") as nb_file:
+            notebook_content = nb_file.read()
+            nb_node = nbformat.reads(notebook_content, as_version=4)
+            script_body, _ = exporter.from_notebook_node(nb_node)
+            with open(script_path, "w", encoding="utf-8") as script_file:
+                script_file.write(script_body)
+
+        # Run the script
+        output_file = os.path.join(OUTPUT_DIR, "step1_stdout.txt")
+        with open(output_file, "w") as f, redirect_stdout(f):
+            exec(script_body)
         timer.end()
+
     except Exception as e:
         print(f"Error running query {query}: {e}")
         continue
