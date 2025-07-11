@@ -1,4 +1,4 @@
-On the commit where this file was created, move 
+On commit 5de5b50b or similar, move
 1. q5-customer-new.sql
 2. q5-customer-no-prejoin.sql
 3. q5-customer.sql
