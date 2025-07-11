@@ -1,3 +1,12 @@
+NOTE: This benchmark is run generating 1024 samples, as opposed to 128 in the all-queries benchmark
+These python files contain the queries as strings, including the SAMPLES=1024. I have created a shortcut
+to run them, just use run.sh in this directory.
+
+sudo -v && bash run.sh
+
+---------------------------------------
+INSTRUCTIONS TO RECREATE
+
 On commit 5de5b50b or similar, move
 1. q5-customer-new.sql
 2. q5-customer-no-prejoin.sql
