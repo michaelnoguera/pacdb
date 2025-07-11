@@ -9,6 +9,8 @@ ALLQUERIES = [
     "q3-customer.sql",
     "q4-customer.sql",
     "q5-customer.sql",
+    "q5-customer-no-prejoin.sql",
+    "q5-customer-new.sql",
     "q6-customer.sql",
     "q7-customer.sql",
     "q8-customer.sql",
