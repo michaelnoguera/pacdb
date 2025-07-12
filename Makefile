@@ -11,12 +11,14 @@ benchmark:
 		| grep . && { echo "Conflict detected. Aborting." >&2; exit 1; } || exit 0'
 	find ./queries -type f ! -name '.*' -exec mv -n {} ./queries-notnow/ \;
 	uv run timing_benchmark.py
-	jq -s ' \
-		group_by(.query) \
-		| map(max_by(.mi)) \
-		| sort_by(.query | capture("q(?<num>\\d+)-").num | tonumber) \
-		| map(del(.mi)) \
-	' benchmarks/*.sql.json > benchmarks/merged.json
+	# jq -s ' \
+	# 	group_by(.query) \
+	# 	| map(max_by(.mi)) \
+	# 	| sort_by(.query | capture("q(?<num>\\d+)-").num | tonumber) \
+	# 	| map(del(.mi)) \
+	# ' benchmarks/*.sql.json > benchmarks/merged.json
+	uv run merge_all_json.py
+	echo "To plot results use ./notebooks/timing_benchmark_graphs.ipynb"
 
 clean:
 	rm -r outputs || true
