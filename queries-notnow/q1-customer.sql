@@ -36,14 +36,14 @@ PREPARE run_query AS
 SELECT
     l_returnflag,
     l_linestatus,
-    2*sum(l_quantity) AS sum_qty,
-    2*sum(l_extendedprice) AS sum_base_price,
-    2*sum(l_extendedprice * (1 - l_discount)) AS sum_disc_price,
-    2*sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) AS sum_charge,
+    sum(l_quantity) AS sum_qty,
+    sum(l_extendedprice) AS sum_base_price,
+    sum(l_extendedprice * (1 - l_discount)) AS sum_disc_price,
+    sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) AS sum_charge,
     avg(l_quantity) AS avg_qty,
     avg(l_extendedprice) AS avg_price,
     avg(l_discount) AS avg_disc,
-    2*count(*) AS count_order
+    count(*) AS count_order
 FROM
     lineitem
 JOIN orders ON lineitem.l_orderkey = orders.o_orderkey

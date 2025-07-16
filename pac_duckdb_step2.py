@@ -98,7 +98,7 @@ def add_pac_noise_to_sample(
         variances = np.var(arr_2d, axis=1)
         if np.isnan(variances):
             variances = np.nanvar(arr_2d, axis=1)
-            logging.info("Output query is sometimes NaN!")
+            logging.warn("Output query is sometimes NaN!")
         scale = variances / (2 * mi)
         assert len(scale) == 1
         scale = scale[0]
@@ -116,6 +116,8 @@ def add_pac_noise_to_sample(
 
             # Choose a sample at random
             frac_samples = len(values) / sample_size
+            if frac_samples != 1:
+                assert(False)
             logging.info(f'frac_samples: {frac_samples}')
             if frac_samples > 1:
                 assert(False)
@@ -151,7 +153,7 @@ def add_pac_noise_to_sample(
         for _ in range(NUM_TRIALS):
             # Choose a sample at random
             frac_samples = len(values) / sample_size
-            if frac_samples > 1:
+            if frac_samples != 1:
                 assert(False)
             logging.info(f'frac_samples: {frac_samples}')
             if np.random.rand() < frac_samples:
@@ -176,6 +178,7 @@ def add_pac_noise_to_sample(
     output = {
         "col": entry.get("col"),
         "row": entry.get("row"),
+        "scale": scale,
         "dtype": dtype_str,
         "value": releases if len(releases) > 0 else [None],
         "frac_nulls": frac_nulls / NUM_TRIALS
