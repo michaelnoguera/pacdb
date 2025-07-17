@@ -9,8 +9,6 @@ ALLQUERIES = [
     "q3-customer.sql",
     "q4-customer.sql",
     "q5-customer.sql",
-    "q5-customer-no-prejoin.sql",
-    "q5-customer-new.sql",
     "q6-customer.sql",
     "q7-customer.sql",
     "q8-customer.sql",
@@ -39,6 +37,7 @@ try:
             "query": queryfile,
             "mi": 0.125,
         })
+        print(f'query {queryfile}')
 
         # load the query file into the queries folder
         src = pathlib.Path("queries-notnow") / queryfile
@@ -46,32 +45,40 @@ try:
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
 
-        # run step 1 and time it (autopac-duckdb-step1.py)
-        cmd = "uv run autopac-duckdb-step1.py"
-        start = time.time()
-        os.system(cmd)
-        end = time.time()
-        elapsed = end - start
-        print(f"Step 1 for {queryfile} took {elapsed:.3f} seconds.")
-        results.update({"step1": elapsed})
+        num_trials = 100
+        step1_times, step2_times, step3_times = 0., 0., 0.
+        for _ in range(num_trials):
+            # run step 1 and time it (autopac-duckdb-step1.py)
+            cmd = "uv run autopac-duckdb-step1.py"
+            start = time.time()
+            os.system(cmd)
+            end = time.time()
+            elapsed = end - start
+            step1_times += elapsed
+            # print(f"Step 1 for {queryfile} took {elapsed:.3f} seconds.")
+            
 
-        # run step 2 and time it (autopac-duckdb-step2.py)
-        cmd = "uv run autopac-duckdb-step2.py -mi 0.125"
-        start = time.time()
-        os.system(cmd)
-        end = time.time()
-        elapsed = end - start
-        print(f"Step 2 for {queryfile} took {elapsed:.3f} seconds.")
-        results.update({"step2": elapsed})
+            # run step 2 and time it (autopac-duckdb-step2.py)
+            cmd = "uv run autopac-duckdb-step2.py -mi 0.125"
+            start = time.time()
+            os.system(cmd)
+            end = time.time()
+            elapsed = end - start
+            # print(f"Step 2 for {queryfile} took {elapsed:.3f} seconds.")
+            step2_times += elapsed
 
-        # run step 3 and time it (autopac-duckdb-step3.py)
-        cmd = "uv run autopac-duckdb-step3.py"
-        start = time.time()
-        os.system(cmd)
-        end = time.time()
-        elapsed = end - start
-        print(f"Step 3 for {queryfile} took {elapsed:.3f} seconds.")
-        results.update({"step3": elapsed})
+            # run step 3 and time it (autopac-duckdb-step3.py)
+            cmd = "uv run autopac-duckdb-step3.py"
+            start = time.time()
+            os.system(cmd)
+            end = time.time()
+            elapsed = end - start
+            step3_times += elapsed
+            # print(f"Step 3 for {queryfile} took {elapsed:.3f} seconds.")
+
+        results.update({"step1": step1_times / num_trials})
+        results.update({"step2": step2_times / num_trials})
+        results.update({"step3": step3_times / num_trials})
 
         # Save results to a JSON file
         with open(BENCHMARK_FILE, "w") as f:
@@ -80,6 +87,6 @@ try:
         # remove the query file from the queries folder
         if dst.exists():
             os.remove(dst)
-            
+        
 except KeyboardInterrupt:
     print("\nInterrupted by user. Exiting gracefully.")
