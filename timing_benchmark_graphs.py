@@ -12,7 +12,6 @@ from matplotlib.rcsetup import cycler
 
 #sns.reset_orig()
 
-# Michael's matplotlib defaults
 # set font to Times New Roman
 LATEX = False
 if LATEX:
