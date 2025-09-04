@@ -1,9 +1,10 @@
 import os
 import pickle
+from contextlib import redirect_stdout
 
-import papermill as pm
 import parse
 
+from autopac_duckdb_step3_flat import run_step_3
 from timer import Timer
 
 QUERYFOLDER = "./queries"
@@ -28,6 +29,8 @@ for query in query_prefixes:
                 mi = result["mi"]
                 queries_to_run.append((query, mi))
 
+print(f"Queries detected: {queries_to_run}")
+
 for query, mi in queries_to_run:
     print(f"Assembling table for: {query} w/ MI: {mi}")
     
@@ -43,18 +46,18 @@ for query, mi in queries_to_run:
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     timer = Timer(experiment=f"{EXPERIMENT}-total", step="step3", output_dir="./times")
-    timer.start(f"s3_run_notebook {mi}")
-    # run the notebook with these parameters
-    pm.execute_notebook(
-        "autopac-duckdb-step3.ipynb",
-        f"./{EXPERIMENT}-{mi}-step3.ipynb",
-        parameters=dict(
-            EXPERIMENT=EXPERIMENT,
-            OUTPUT_DIR=OUTPUT_DIR,
-            INPUT_DIR=INPUT_DIR,
-            INDEX_COLS=INDEX_COLS,
-            OUTPUT_COLS=OUTPUT_COLS,
+    timer.start(f"s3_run_function {mi}")
+
+    # run the function with these parameters
+    output_file = os.path.join(OUTPUT_DIR, "step3_stdout.txt")
+    with open(output_file, "w") as f, redirect_stdout(f):
+        run_step_3(
+            experiment=EXPERIMENT,
+            input_dir=INPUT_DIR,
+            output_dir=OUTPUT_DIR,
+            index_cols=INDEX_COLS,
+            output_cols=OUTPUT_COLS,
             templatedf_path=templatedf_path
-        ),
-    )
+        )
+
     timer.end()

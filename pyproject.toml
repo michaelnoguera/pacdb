@@ -6,6 +6,7 @@ dependencies = [
     "duckdb>=1.2.2",
     "ipykernel>=6.29.5",
     "matplotlib>=3.10.3",
+    "nbconvert>=7.16.6",
     "numpy>=2.2.5",
     "papermill>=2.6.0",
     "parse>=1.20.2",
@@ -33,5 +34,6 @@ conn_str = ["data/tpch/tpch.duckdb"]
 [dependency-groups]
 dev = [
     "mypy>=1.15.0",
+    "pyinstrument>=5.0.3",
     "ruff>=0.11.8",
 ]
