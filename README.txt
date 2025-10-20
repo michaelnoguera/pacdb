@@ -30,7 +30,7 @@ source .venv/bin/activate
 
 Setup (pip/venv):
 -----------------
-python3.11 -m venv .venv
+python3.13 -m venv .venv
 source .venv/bin/activate
 pip3 install -r requirements.txt
 
@@ -48,12 +48,18 @@ uv run generate.py --sf 2
 
 Usage:
 ------
-The following steps will work to run Q1. Make sure you don't have anything precious in the outputs folder.
+The following steps will work to run any query you put in the ./queries folder. Make sure you don't have anything
+precious in the outputs folder.
 
 rm -r ./outputs/* 
-python3.11 autopac_duckdb_step1.py
-python3.11 autopac_duckdb_step2.py
-python3.11 autopac_duckdb_step3.py
+uv run autopac_duckdb_step1.py
+uv run autopac_duckdb_step2.py
+uv run autopac_duckdb_step3.py
+
+There is a timing benchmark script to automating all the queries in a list: uv run timing_benchmark.py
+You will have to edit the list of queries in that file if you want to change the queries run.
+Make sure that the ./queries folder is empty when you start the script, especially if you are re-running
+after it has crashed.
 
 If you are looking at Jupyter notebooks, make sure that you are using the kernel at .venv/bin/jupyter
 
@@ -61,3 +67,5 @@ To clean up before committing, delete everything except the zip files in ./outpu
 
 find ./outputs -type f ! -name "*.zip" -delete
 find ./outputs -type d -empty -delete
+
+The Makefile has some useful targets that automate many of these steps.

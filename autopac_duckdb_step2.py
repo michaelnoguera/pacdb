@@ -47,7 +47,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     logging.basicConfig(
-        level=logging.INFO if args.verbose else logging.WARNING,
+        level=logging.DEBUG if args.verbose else logging.WARNING,
         format="%(asctime)s | %(filename)s:%(lineno)d %(levelname)s %(message)s"
     )
     
@@ -55,5 +55,5 @@ if __name__ == "__main__":
         args.mi = [0.5]
 
     for mi in args.mi:
-        logging.info(f"Running with MI value: {mi}")
+        logging.debug(f"Running with MI value: {mi}")
         main(mi=mi, verbose=args.verbose)

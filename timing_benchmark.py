@@ -1,4 +1,6 @@
+import argparse
 import json
+import logging
 import os
 import pathlib
 import shutil
@@ -33,6 +35,29 @@ ALLQUERIES = [
 ]
 
 BENCHMARKS_FOLDER = pathlib.Path("benchmarks")
+
+parser = argparse.ArgumentParser(description="Timing benchmark for PACDB queries.")
+group = parser.add_mutually_exclusive_group()
+group.add_argument(
+    "-v", "--verbose",
+    action="store_true",
+    help="Set logging level to INFO (same as -l INFO)."
+)
+group.add_argument(
+    "-l", "--log-level",
+    choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+    default="WARNING",
+    help="Set the logging level (default: WARNING)."
+)
+args = parser.parse_args()
+
+if args.verbose:
+    args.log_level = "INFO"
+
+logging.basicConfig(
+    level=getattr(logging, args.log_level),
+    format="%(asctime)s | %(filename)s:%(lineno)d %(levelname)s %(message)s"
+)
 
 if not os.path.exists(BENCHMARKS_FOLDER):
     os.makedirs(BENCHMARKS_FOLDER)
