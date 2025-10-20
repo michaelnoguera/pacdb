@@ -34,6 +34,12 @@ python3.11 -m venv .venv
 source .venv/bin/activate
 pip3 install -r requirements.txt
 
+To install the DuckDB CLI:
+------------------------------------------
+Go to the releases for version 1.3.2, and copy the url for your platform: https://github.com/duckdb/duckdb/releases/tag/v1.3.2
+wget https://github.com/duckdb/duckdb/releases/download/v1.3.2/duckdb_cli-osx-universal.zip
+unzip duckdb_cli-osx-universal.zip
+mv duckdb ~/.local/bin  # add to your path, this directory is on my path
 
 To generate TPC-H data:
 -----------------------
