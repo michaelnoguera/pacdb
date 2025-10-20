@@ -13,7 +13,7 @@ fi
 
 # 1. generate the step 1 scripts
 
-uv run autopac-duckdb-step1.py --prepare-only
+uv run autopac_duckdb_step1.py --prepare-only
 
 # 2. run all the step 1 scripts through hyperfine
 

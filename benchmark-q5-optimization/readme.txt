@@ -11,7 +11,7 @@ On commit 5de5b50b or similar, move
 1. q5-customer-new.sql
 2. q5-customer-no-prejoin.sql
 3. q5-customer.sql
-into ./queries/, then run `uv run autopac-duckdb-step1.py` once to generate the notebooks for
+into ./queries/, then run `uv run autopac_duckdb_step1.py` once to generate the notebooks for
 each of the queries we are testing.
 
 Then let's convert the step 1 notebooks to python scripts so that we can easily time them

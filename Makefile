@@ -1,7 +1,7 @@
 .PHONY: run clean
 
 run:
-	uv run autopac-duckdb-step1.py && uv run autopac-duckdb-step2.py -mi 0.25 && uv run autopac-duckdb-step3.py
+	uv run autopac_duckdb_step1.py && uv run autopac_duckdb_step2.py -mi 0.25 && uv run autopac_duckdb_step3.py
 
 benchmark:
 	@set -e

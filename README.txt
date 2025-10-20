@@ -16,7 +16,7 @@ docker run -it --rm \
     -w /app \
     -e UV_PROJECT_ENVIRONMENT=/app/.venv \
     pacdb \
-    uv sync --offline && uv run autopac-duckdb-step1.py && uv run autopac-duckdb-step2.py && uv run autopac-duckdb-step3.py
+    uv sync --offline && uv run autopac_duckdb_step1.py && uv run autopac_duckdb_step2.py && uv run autopac_duckdb_step3.py
 
 Setup (devcontainer):
 ---------------------
@@ -34,14 +34,20 @@ python3.11 -m venv .venv
 source .venv/bin/activate
 pip3 install -r requirements.txt
 
+
+To generate TPC-H data:
+-----------------------
+in the folder data/tpch, run:
+uv run generate.py --sf 2
+
 Usage:
 ------
 The following steps will work to run Q1. Make sure you don't have anything precious in the outputs folder.
 
 rm -r ./outputs/* 
-python3.11 autopac-duckdb-step1.py
-python3.11 autopac-duckdb-step2.py
-python3.11 autopac-duckdb-step3.py
+python3.11 autopac_duckdb_step1.py
+python3.11 autopac_duckdb_step2.py
+python3.11 autopac_duckdb_step3.py
 
 If you are looking at Jupyter notebooks, make sure that you are using the kernel at .venv/bin/jupyter
 
