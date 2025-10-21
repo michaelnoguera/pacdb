@@ -100,6 +100,13 @@ def run_step_3(
     for i in range(len(alldata)):
         alldata[i]['row'] = pl.DataFrame(alldata[i]['row']).cast(templatedf.select(INDEX_COLS).schema).to_dicts()[0]
 
+    # The response is a list of many NUM_TRIALS trials, we only need one so we just take the first
+    from pac_duckdb_step2 import NUM_TRIALS
+    for i in range(len(alldata)):
+        if isinstance(alldata[i]['value'], list) and len(alldata[i]['value']) == NUM_TRIALS:
+            alldata[i]['value'] = alldata[i]['value'][0]
+        elif alldata[i]['value'] in [[], [None], None]:
+            alldata[i]['value'] = None
 
     # In[ ]:
 
@@ -180,5 +187,6 @@ def run_step_3(
 
     timer.start("write_output_json")
     df.write_json(os.path.join(OUTPUT_DIR, 'output.json'))
+    df.write_csv(os.path.join(OUTPUT_DIR, 'output.csv'))
     timer.end()
 
