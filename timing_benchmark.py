@@ -28,7 +28,7 @@ ALLQUERIES = [
     "q14-customer.sql",
     "q15-customer.sql",
     "q17-customer.sql",
-    #"q19-customer.sql",
+    "q19-customer.sql",
     "q20-customer.sql",
     "q21-customer.sql",
     "q22-customer.sql",
