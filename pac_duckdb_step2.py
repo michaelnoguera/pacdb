@@ -83,6 +83,7 @@ def add_pac_noise_to_sample(
         is_numeric = values.dtype.kind in 'biufc'
     if is_numeric:
         values = [k for k in values if not np.isnan(k)] # only one output col
+        assert(len(values) == len(raw_values)) # no output should be nan
 
     timer.end()
 
