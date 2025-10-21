@@ -174,7 +174,7 @@ def add_pac_noise_to_sample(
         "row": entry.get("row"),
         "scale": scale,
         "dtype": dtype_str,
-        "value": releases if len(releases) > 0 else [None],
+        "value": [None] if not releases else releases,
         "frac_nulls": frac_nulls / NUM_TRIALS
     }
 

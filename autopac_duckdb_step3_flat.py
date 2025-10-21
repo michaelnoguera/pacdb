@@ -157,7 +157,7 @@ def run_step_3(
         for adidx, adentry in alldata.items()
     }
     allinfo_single_val2 = {
-        (rowidxes[tuple(adentry['row'].values())], colidxes[adentry['col']]): adentry['value'][0]
+        (rowidxes[tuple(adentry['row'].values())], colidxes[adentry['col']]): adentry['value'][0] if adentry['value'] else None
         for adidx, adentry in alldata.items()
     }
 
