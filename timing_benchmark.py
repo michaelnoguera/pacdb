@@ -55,8 +55,12 @@ if args.verbose:
     args.log_level = "INFO"
 
 logging.basicConfig(
+    filename="timing_benchmark.log",
     level=getattr(logging, args.log_level),
-    format="%(asctime)s | %(filename)s:%(lineno)d %(levelname)s %(message)s"
+    format='[%(asctime)s] %(levelname)s %(module)s %(message)s',
+    datefmt='%d/%m/%Y %H:%M:%S',
+    #format="%(asctime)s | %(filename)s:%(lineno)d %(levelname)s %(message)s",
+    filemode='w'
 )
 
 if not os.path.exists(BENCHMARKS_FOLDER):

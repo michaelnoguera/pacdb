@@ -23,3 +23,5 @@ figs/*
 times/*
 benchmarks/*
 tmp/*
+
+timing_benchmark.log
