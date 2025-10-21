@@ -43,8 +43,18 @@ mv duckdb ~/.local/bin  # add to your path, this directory is on my path
 
 To generate TPC-H data:
 -----------------------
-in the folder data/tpch, run:
-uv run generate.py --sf 2
+The scripts in this repository expect to find a TPC-H dataset located at ./data/tpch/tpch.duckdb.
+
+We provide ./data/tpch/tpch-sf0.1.duckdb (scale factor = 0.1) for convenience and reproducibility.
+If you want to use this, then you must copy it to the expected location:
+mv ./data/tpch/tpch-sf0.1.duckdb ./data/tpch/tpch.duckdb
+
+The ./data/tpch/generate.py script is used to generate the data for all other scale factors. The
+table will be written directly to ./data/tpch/tpch.duckdb, and replace any existing file there.
+
+Usage for generate.py:
+cd data/tpch
+uv run generate.py --sf 1
 
 Usage:
 ------
