@@ -24,7 +24,7 @@ def run_step_3(
         index_cols: list[str],
         output_cols: list[str],
         templatedf_path: str
-):
+): 
     #EXPERIMENT = "asdf"
     #INPUT_DIR = f"./outputs/{EXPERIMENT}-step2"
     #OUTPUT_DIR = f"./outputs/{EXPERIMENT}-step3"
@@ -100,14 +100,6 @@ def run_step_3(
     for i in range(len(alldata)):
         alldata[i]['row'] = pl.DataFrame(alldata[i]['row']).cast(templatedf.select(INDEX_COLS).schema).to_dicts()[0]
 
-    # The response is a list of many NUM_TRIALS trials, we only need one so we just take the first
-    from pac_duckdb_step2 import NUM_TRIALS
-    for i in range(len(alldata)):
-        if isinstance(alldata[i]['value'], list) and len(alldata[i]['value']) == NUM_TRIALS:
-            alldata[i]['value'] = alldata[i]['value'][0]
-        elif alldata[i]['value'] in [[], [None], None]:
-            alldata[i]['value'] = None
-
     # In[ ]:
 
 
@@ -128,7 +120,6 @@ def run_step_3(
             pl.col(k).eq(v)
             for k, v in row.items()
         ).select("index").item()
-        print(row)
 
     allinfo = [
         {"colname": adentry['col'],
@@ -138,6 +129,9 @@ def run_step_3(
         "rowidx": rowidxes[tuple(adentry['row'].values())]}
         for adidx, adentry in alldata.items()
     ]
+
+
+
 
     colnames = {}
     rownames = {}
@@ -162,18 +156,23 @@ def run_step_3(
         (rowidxes[tuple(adentry['row'].values())], colidxes[adentry['col']]): adentry['value']
         for adidx, adentry in alldata.items()
     }
+    allinfo_single_val2 = {
+        (rowidxes[tuple(adentry['row'].values())], colidxes[adentry['col']]): adentry['value'][0]
+        for adidx, adentry in alldata.items()
+    }
 
     df2 = []
-    print(allcols)
+    df_single_val = []
     for row in allrows:
-        print(row, [allinfo2.get((rowidxes[tuple(row)], colidxes[col]), None) for col in OUTPUT_COLS])
         df2.append([*row, *[allinfo2.get((rowidxes[tuple(row)], colidxes[col]), None) for col in OUTPUT_COLS]])
+        df_single_val.append([*row, *[allinfo_single_val2.get((rowidxes[tuple(row)], colidxes[col]), None) for col in OUTPUT_COLS]])
 
 
     # In[ ]:
 
 
     df = pl.DataFrame(df2, schema=allcols, orient='row')
+    df_single_val = pl.DataFrame(df_single_val, schema=allcols, orient='row')
 
     if USING_DEFAULT_INDEX_COLS: # If we used default index cols, remove them from output
         df = df.select(OUTPUT_COLS)
@@ -187,6 +186,6 @@ def run_step_3(
 
     timer.start("write_output_json")
     df.write_json(os.path.join(OUTPUT_DIR, 'output.json'))
-    df.write_csv(os.path.join(OUTPUT_DIR, 'output.csv'))
+    df_single_val.write_csv(os.path.join(OUTPUT_DIR, 'output.csv'))
     timer.end()
 

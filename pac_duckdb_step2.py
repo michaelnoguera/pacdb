@@ -91,6 +91,7 @@ def add_pac_noise_to_sample(
     if not add_noise:
         frac_nulls = NUM_TRIALS
     elif is_numeric:
+        assert add_noise
         
         # Compute per-coordinate noise scale: variance / (2 * mi)
         arr_2d = np.stack([np.atleast_1d(v) for v in values], axis=-1)
@@ -112,20 +113,12 @@ def add_pac_noise_to_sample(
 
         for _ in range(NUM_TRIALS):
 
-
             # Choose a sample at random
             frac_samples = len(values) / sample_size
             logging.debug(f'frac_samples: {frac_samples}')
             if frac_samples != 1:
                 assert(False)
-            logging.info(f'frac_samples: {frac_samples}')
-            if frac_samples > 1:
-                assert(False)
-            if np.random.rand() < frac_samples:
-                sample = np.random.choice(values)
-            else:
-                sample = np.nan
-
+            sample = np.random.choice(values)
 
             if add_noise and not np.isnan(sample):
                 # Compute noise for numeric types
