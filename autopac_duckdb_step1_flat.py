@@ -4,6 +4,8 @@
 import logging
 import os
 import pickle
+import shutil
+import tempfile
 
 import duckdb
 import polars as pl
@@ -26,6 +28,10 @@ def main(
     # Timer setup
     timer = Timer(experiment=EXPERIMENT, step="step1", output_dir="./times")
     logger.debug("Timer initialized.")
+
+    TRUE_OUTPUT_DIR = OUTPUT_DIR
+    OUTPUT_DIR = tempfile.mkdtemp()
+    logger.info(f"Using temporary output directory: {OUTPUT_DIR}")
 
     # Ensure the output directory exists
     if not os.path.exists(OUTPUT_DIR):
@@ -208,5 +214,10 @@ def main(
             logger.debug(f"Wrote {OUTPUT_DIR}/json/{i}.json for group {group} and column {col}")
             i+=1
     os.fsync(os.open(f"{OUTPUT_DIR}/json", os.O_RDONLY))  # Ensure all writes are flushed to disk
+
+    shutil.rmtree(TRUE_OUTPUT_DIR, ignore_errors=True) # Move the temp dir to the true output dir, atomic overwrite
+    shutil.move(OUTPUT_DIR, TRUE_OUTPUT_DIR)
+    OUTPUT_DIR = TRUE_OUTPUT_DIR
+
     timer.end()
     logger.info("All JSON files written and flushed to disk.")
