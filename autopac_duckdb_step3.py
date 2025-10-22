@@ -50,16 +50,14 @@ def main():
         timer.start(f"s3_run_function {mi}")
 
         # run the function with these parameters
-        output_file = os.path.join(OUTPUT_DIR, "step3_stdout.txt")
-        with open(output_file, "w") as f, redirect_stdout(f):
-            run_step_3(
-                experiment=EXPERIMENT,
-                input_dir=INPUT_DIR,
-                output_dir=OUTPUT_DIR,
-                index_cols=INDEX_COLS,
-                output_cols=OUTPUT_COLS,
-                templatedf_path=templatedf_path
-            )
+        run_step_3(
+            experiment=EXPERIMENT,
+            input_dir=INPUT_DIR,
+            output_dir=OUTPUT_DIR,
+            index_cols=INDEX_COLS,
+            output_cols=OUTPUT_COLS,
+            templatedf_path=templatedf_path
+        )
 
         timer.end()
 
