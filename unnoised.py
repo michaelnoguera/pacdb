@@ -6,6 +6,8 @@
 # ///
 
 import argparse
+import datetime
+import hashlib
 import json
 import subprocess
 import time
@@ -45,3 +47,13 @@ PRAGMA tpch({i}); -- https://duckdb.org/docs/stable/extensions/tpch.html
             query = entry.get("query", "unknown")
             total = entry.get("total", "NA")
             f.write(f"{query}\t{total}\n")
+
+    # make note of which database file was used
+    print("Documenting generation in last_run.txt")
+    with open("./unnoised/last_run.txt", "w") as f:
+        f.write(f"{datetime.datetime.now().isoformat()}\n")
+        # write a sha256 hash of the .duckdb file
+        with open("./data/tpch/tpch.duckdb", "rb") as dbfile:
+            digest = hashlib.file_digest(dbfile, "sha256")
+        f.write(f"hash of ./data/tpch/tpch.duckdb: {digest.hexdigest()}\n")
+        f.write(f"query numbers: {', '.join(str(q) for q in query_numbers)}\n")
