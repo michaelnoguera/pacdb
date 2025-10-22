@@ -27,7 +27,7 @@ PRAGMA tpch({i}); -- https://duckdb.org/docs/stable/extensions/tpch.html
             f.write(query)
 
         start = time.time()
-        p = subprocess.run(f"duckdb ./data/tpch/tpch.duckdb < ./unnoised/q{i}.sql > ./unnoised/q{i}.csv", shell=True, check=True)
+        p = subprocess.run(f"duckdb --readonly ./data/tpch/tpch.duckdb < ./unnoised/q{i}.sql > ./unnoised/q{i}.csv && sync", shell=True, check=True)
         stop = time.time()
         elapsed = stop - start
         times.append({
@@ -38,3 +38,10 @@ PRAGMA tpch({i}); -- https://duckdb.org/docs/stable/extensions/tpch.html
         subprocess.run(f"rm ./unnoised/q{i}.sql", shell=True)
     
     json.dump(times, open("./unnoised/times.json", "w"), indent=4)
+
+    with open("./unnoised/times.tsv", "w") as f:
+        f.write("Query\tTotal\n")
+        for entry in times:
+            query = entry.get("query", "unknown")
+            total = entry.get("total", "NA")
+            f.write(f"{query}\t{total}\n")

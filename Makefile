@@ -33,4 +33,6 @@ clean:
 	find . -maxdepth 1 -name 'ap-duckdb-*step3.py' -exec rm {} + || true
 
 unnoised:
+	rm -r unnoised || true
+	mkdir unnoised || true
 	uv run unnoised.py
