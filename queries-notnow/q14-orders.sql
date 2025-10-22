@@ -5,7 +5,7 @@
 --begin SAMPLE_STEP--
 DROP TABLE IF EXISTS random_samples;
 
-CREATE TABLE random_samples AS
+CREATE TEMP TABLE random_samples AS
 WITH sample_numbers AS MATERIALIZED (
     SELECT range AS sample_id FROM range(128)
 ), random_values AS MATERIALIZED (

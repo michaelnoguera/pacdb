@@ -3,13 +3,15 @@
 
 """
 Usage:
-python3.11 pac_duckdb_step2_caller.py -e pac-duckdb-q1 -mi 0.125
+python3.13 pac_duckdb_step2_caller.py -e pac-duckdb-q1 -mi 0.125
 """
 
 
 import argparse
 import logging
 import os
+import shutil
+import tempfile
 
 import parse
 
@@ -21,8 +23,16 @@ def run_batch_pac_noise_step2(
     max_mi: float = 0.25,
     verbose: bool = False,
 ):
+    input_tempdir = tempfile.mkdtemp()
     input_dir = f'./outputs/{experiment}-step1/json'
-    output_dir = f'./outputs/{experiment}-{max_mi}-step2'
+    # copy all from input_dir to input_tempdir 
+    shutil.copytree(input_dir, input_tempdir, dirs_exist_ok=True)
+
+    real_output_dir = f'./outputs/{experiment}-{max_mi}-step2' # we will copy there at the end
+    if os.path.exists(real_output_dir):
+        logging.warning(f"Output directory {real_output_dir} already exists, it will be overwritten.")
+    
+    output_dir = tempfile.mkdtemp()
     os.makedirs(output_dir, exist_ok=True)
 
     pattern = parse.compile("{n}.json")
@@ -33,7 +43,7 @@ def run_batch_pac_noise_step2(
             input_file = os.path.join(input_dir, filename)
             output_file = os.path.join(output_dir, f"{n}.json")
 
-            logging.info(f"Processing {input_file} -> {output_file}")
+            logging.debug(f"Processing {input_file} -> {output_file}")
             add_pac_noise_to_sample(
                 input_path=input_file,
                 max_mi=max_mi,
@@ -42,6 +52,13 @@ def run_batch_pac_noise_step2(
                 experiment=experiment,
                 step="step2"
             )
+
+    # copy all from output_dir to real_output_dir
+    # rm the real_output_dir if it exists, then rename the temp dir to real_output_dir
+    if os.path.exists(real_output_dir):
+        shutil.rmtree(real_output_dir)
+    shutil.move(output_dir, real_output_dir)
+    shutil.rmtree(input_tempdir)
 
 if __name__ == "__main__":
     # Parse command-line arguments

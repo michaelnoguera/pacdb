@@ -54,6 +54,15 @@ def add_pac_noise_to_sample(
     dtype_str = entry.get("dtype", "")
     raw_values = entry.get("values", [])
 
+    sample_size = entry.get("samples", 0)
+    add_noise = True
+    if len(raw_values) < sample_size:
+        logging.warning("For %s %s, sample size (%d) is larger than the number of values (%d).", experiment, input_path.name, sample_size, len(raw_values))
+        # if len(raw_values) < sample_size/2:
+        add_noise = False # always return None
+
+    releases = []
+    scale = None
     # Determine if numeric type
     try:
         series = pl.Series("v", raw_values)
@@ -74,16 +83,7 @@ def add_pac_noise_to_sample(
         is_numeric = values.dtype.kind in 'biufc'
     if is_numeric:
         values = [k for k in values if not np.isnan(k)] # only one output col
-
-    sample_size = entry.get("samples", 0)
-    add_noise = True 
-    if len(values) < sample_size:
-        logging.warn("Sample size (%d) is larger than the number of values (%d).", sample_size, len(values))
-        # if len(raw_values) < sample_size/2:
-        add_noise = False # always return None
-
-    releases = []
-    scale = None
+        assert(len(values) == len(raw_values)) # no output should be nan
 
     timer.end()
 
@@ -92,40 +92,34 @@ def add_pac_noise_to_sample(
     if not add_noise:
         frac_nulls = NUM_TRIALS
     elif is_numeric:
+        assert add_noise
         
         # Compute per-coordinate noise scale: variance / (2 * mi)
         arr_2d = np.stack([np.atleast_1d(v) for v in values], axis=-1)
         variances = np.var(arr_2d, axis=1)
         if np.isnan(variances):
             variances = np.nanvar(arr_2d, axis=1)
-            logging.warn("Output query is sometimes NaN!")
+            logging.warning("Output query is sometimes NaN!")
         scale = variances / (2 * mi)
         assert len(scale) == 1
         scale = scale[0]
 
-        logging.info("Stacked array shape: %s", arr_2d.shape)
-        logging.info("Calculated variances: %s", variances)
-        logging.info("Noise scale per coordinate (variance/(2*%s)): %s", mi, scale)
-        logging.info(
+        logging.debug("Stacked array shape: %s", arr_2d.shape)
+        logging.debug("Calculated variances: %s", variances)
+        logging.debug("Noise scale per coordinate (variance/(2*%s)): %s", mi, scale)
+        logging.debug(
             "Numeric type '%s' detected. Processing %d numeric samples.",
             dtype_str, len(values)
         )
 
         for _ in range(NUM_TRIALS):
 
-
             # Choose a sample at random
             frac_samples = len(values) / sample_size
+            logging.debug(f'frac_samples: {frac_samples}')
             if frac_samples != 1:
                 assert(False)
-            logging.info(f'frac_samples: {frac_samples}')
-            if frac_samples > 1:
-                assert(False)
-            if np.random.rand() < frac_samples:
-                sample = np.random.choice(values)
-            else:
-                sample = np.nan
-
+            sample = np.random.choice(values)
 
             if add_noise and not np.isnan(sample):
                 # Compute noise for numeric types
@@ -142,20 +136,20 @@ def add_pac_noise_to_sample(
                 release = None
                 noise = None
 
-            logging.info(
+            logging.debug(
                 "Selected sample: %s; noise: %s; release: %s",
                 sample, noise, release
             )
     else:
         noise = 'uniform'
         unique_values = list(set(values))
-        logging.info("Num unique values: %s", len(unique_values))
+        logging.debug("Num unique values: %s", len(unique_values))
         for _ in range(NUM_TRIALS):
             # Choose a sample at random
             frac_samples = len(values) / sample_size
             if frac_samples != 1:
                 assert(False)
-            logging.info(f'frac_samples: {frac_samples}')
+            logging.debug(f'frac_samples: {frac_samples}')
             if np.random.rand() < frac_samples:
                 sample = np.random.choice(values)
             else:
@@ -168,7 +162,7 @@ def add_pac_noise_to_sample(
                 frac_nulls += 1
                 release = None
 
-            logging.info(
+            logging.debug(
                 "Selected sample: %s; noise: %s; release: %s",
                 sample, noise, release
             )

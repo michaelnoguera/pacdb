@@ -27,7 +27,7 @@ PRAGMA tpch({i}); -- https://duckdb.org/docs/stable/extensions/tpch.html
             f.write(query)
 
         start = time.time()
-        p = subprocess.run(f"uvx duckdb ./data/tpch/tpch.duckdb < ./unnoised/q{i}.sql > ./unnoised/q{i}.csv", shell=True, check=True)
+        p = subprocess.run(f"duckdb ./data/tpch/tpch.duckdb < ./unnoised/q{i}.sql > ./unnoised/q{i}.csv", shell=True, check=True)
         stop = time.time()
         elapsed = stop - start
         times.append({
