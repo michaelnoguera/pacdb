@@ -1,4 +1,4 @@
-.PHONY: run clean
+.PHONY: run clean unnoised
 
 run:
 	uv run autopac_duckdb_step1.py && uv run autopac_duckdb_step2.py -mi 0.25 && uv run autopac_duckdb_step3.py
@@ -31,3 +31,6 @@ clean:
 	find . -maxdepth 1 -name 'ap-duckdb-*step1.py' -exec rm {} + || true
 	find . -maxdepth 1 -name 'ap-duckdb-*step3.ipynb' -exec rm {} + || true
 	find . -maxdepth 1 -name 'ap-duckdb-*step3.py' -exec rm {} + || true
+
+unnoised:
+	uv run unnoised.py
