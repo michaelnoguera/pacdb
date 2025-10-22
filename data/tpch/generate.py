@@ -4,6 +4,8 @@ Generate the TPC-H tables by using the DuckDB tpch plugin.
 Export tables to parquet files saved here for use in experiments.
 """
 import argparse
+import datetime
+import hashlib
 import logging
 import os
 
@@ -55,3 +57,13 @@ if PARQUET_EXPORT:
 
 logging.info("Closing DuckDB connection")
 con.close()
+
+# create last_generated.txt file
+logging.info("Documenting generation in last_generated.txt")
+with open("last_generated.txt", "w") as f:
+    f.write(f"{datetime.datetime.now().isoformat()}\n")
+    # write a sha256 hash of the .duckdb file
+    with open("./tpch.duckdb", "rb") as dbfile:
+        digest = hashlib.file_digest(dbfile, "sha256")
+    f.write(f"{digest.hexdigest()}\n")
+    f.write(f"SCALE_FACTOR={SCALE_FACTOR}\nPARQUET_EXPORT={PARQUET_EXPORT}\n")
