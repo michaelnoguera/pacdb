@@ -26,3 +26,4 @@ tmp/*
 
 timing_benchmark.log
 data/tpch/tpch.duckdb
+data/tpch/last_generated.txt
