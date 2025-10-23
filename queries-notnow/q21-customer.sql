@@ -4,6 +4,8 @@
 
 --begin SAMPLE_STEP--
 DROP TABLE IF EXISTS random_samples;
+DROP TABLE IF EXISTS lineitem_enhanced;
+DROP INDEX IF EXISTS idx_lineitem_enhanced_order_supp;
 
 CREATE TEMP TABLE random_samples AS
 WITH sample_numbers AS MATERIALIZED (
@@ -18,76 +20,72 @@ WITH sample_numbers AS MATERIALIZED (
 )
 SELECT
     sample_id,
-    row_id,
-    random_binary
+    row_id
 FROM random_values
+WHERE random_binary = TRUE
 ORDER BY sample_id, row_id;
+
+CREATE TEMP TABLE lineitem_enhanced AS
+SELECT l.l_orderkey, 
+    l.l_suppkey, 
+    l.l_linenumber, 
+    c.rowid as c_rowid, 
+    s.s_name as s_name, 
+    (l.l_receiptdate > l.l_commitdate) AS is_late,
+    (o.o_orderstatus = 'F') AS is_orderstatus_f,
+    (n.n_name = 'SAUDI ARABIA') AS is_nation_saudi_arabia
+FROM lineitem l
+JOIN orders o ON o.o_orderkey = l.l_orderkey
+JOIN customer c ON c.c_custkey = o.o_custkey
+JOIN supplier s ON s.s_suppkey = l.l_suppkey
+JOIN nation n ON s.s_nationkey = n.n_nationkey
+ORDER BY l.l_orderkey, l.l_linenumber;
+
+CREATE INDEX idx_lineitem_enhanced_order_supp ON lineitem_enhanced(l_orderkey, l_suppkey);
 --end SAMPLE_STEP--
+
 
 --begin PREPARE_STEP--
 DEALLOCATE PREPARE run_query;
 
-CREATE TEMP TABLE lineitem_sample AS
-SELECT rs.sample_id as sample_id, 
-    lineitem.l_suppkey,
-    lineitem.l_orderkey,
-    lineitem.l_receiptdate,
-    lineitem.l_commitdate
-FROM lineitem,
-    orders,
-    customer,
-    random_samples AS rs
-WHERE
-    rs.row_id = customer.rowid
-    AND rs.random_binary = TRUE
-    AND o_custkey = c_custkey
-    AND o_orderkey = l_orderkey
-ORDER BY rs.sample_id, lineitem.rowid;
-
-
 PREPARE run_query AS
+WITH lineitem_sampled AS (
+    SELECT l_orderkey,
+        l_suppkey,
+        s_name,
+        is_late,
+        is_orderstatus_f,
+        is_nation_saudi_arabia
+    FROM lineitem_enhanced l
+    JOIN random_samples rs ON l.c_rowid = rs.row_id AND rs.sample_id = $sample
+)
 SELECT
-    s.s_name,
-    count(*) AS numwait
+    l.s_name,
+    COUNT(*) AS numwait
 FROM
-    (
-        SELECT
-            l1.l_suppkey,
-            l1.l_orderkey
-        FROM
-            lineitem_sample l1
-            JOIN orders o ON o.o_orderkey = l1.l_orderkey
-            JOIN supplier s ON s.s_suppkey = l1.l_suppkey
-            JOIN nation n ON s.s_nationkey = n.n_nationkey
-        WHERE
-            l1.sample_id = $sample
-            AND o.o_orderstatus = 'F'
-            AND l1.l_receiptdate > l1.l_commitdate
-            AND n.n_name = 'SAUDI ARABIA'
-            AND EXISTS (
-                SELECT 1
-                FROM lineitem_sample l2
-                WHERE
-                    l2.sample_id = $sample
-                    AND l2.l_orderkey = l1.l_orderkey
-                    AND l2.l_suppkey <> l1.l_suppkey
-            )
-            AND NOT EXISTS (
-                SELECT 1
-                FROM lineitem_sample l3
-                WHERE
-                    l3.sample_id = $sample
-                    AND l3.l_orderkey = l1.l_orderkey
-                    AND l3.l_suppkey <> l1.l_suppkey
-                    AND l3.l_receiptdate > l3.l_commitdate
-            )
-    ) xx
-    JOIN supplier s ON s.s_suppkey = xx.l_suppkey
+    lineitem_sampled l
+WHERE
+    l.is_late = TRUE
+    AND l.is_orderstatus_f = TRUE
+    AND l.is_nation_saudi_arabia = TRUE
+    AND EXISTS (
+        SELECT 1
+        FROM lineitem_enhanced l2
+        WHERE l2.l_orderkey = l.l_orderkey
+          AND l2.l_suppkey <> l.l_suppkey
+    )
+    AND NOT EXISTS (
+        SELECT 1
+        FROM lineitem_enhanced l3
+        WHERE l3.l_orderkey = l.l_orderkey
+          AND l3.l_suppkey <> l.l_suppkey
+          AND l3.is_late = TRUE
+    )
 GROUP BY
-    s.s_name
+    l.s_name
 ORDER BY
     numwait DESC,
-    s.s_name;
+    l.s_name;
 --end PREPARE_STEP--
 
 EXECUTE run_query(sample := 0);
