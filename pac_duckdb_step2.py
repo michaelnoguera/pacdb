@@ -132,6 +132,7 @@ def add_pac_noise_to_sample(
             else:
                 if np.isnan(sample):
                     sample = None
+                    assert(False)
                     frac_nulls += 1
                 release = None
                 noise = None
