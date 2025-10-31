@@ -1,15 +1,55 @@
-All input data is in ./data.
-Queries in ./queries will be run.
-Move the queries from ./queries-notnow into ./queries that you want to run.
+PAC-DB Artifact
 
-All outputs are in ./outputs. Communicaiton between workflow steps takes the form of
-json files, one per entry, labeled with the row and column to which the entry belongs.
-The folders full of json files in ./outputs are zipped to make tracking them in git manageable. Unzip
-the zip files if you want to see the data.
+All input data is in ./data. Queries in ./queries will be run. Move the queries from 
+./queries-notnow into ./queries that you want to run.
 
-Run in Docker (no setup):
--------------------------
+All outputs are in ./outputs. Communication between workflow steps takes the form of
+json files in the outputs directory.
+
+
+
+### If you want to use Docker ###
+
+Run in Docker (without setup):
+------------------------------
+# Copy the pre-generated tiny dataset into the location where the database file is expected to reside.
+mv ./data/tpch/tpch-sf0.1.duckdb ./data/tpch/tpch.duckdb
+
+# Warning: The pre-generated tiny dataset is sf=0.1, smaller than the TPC-H benchmark specifies.
+# You might get non-responses from PAC-DB on some queries with sf=0.1, because there are not enough
+# selected rows to return non-null results for some samples of the table. This is correct behavior
+# from a privacy standpoint, but will prevent you from getting a numeric output. Generate a larger
+# dataset of at least sf=1 and retry if this happens repeatedly and you want to see a numeric output.
+# The instructions to do that in docker are in the next section of this readme.
+# (For Q19 this happens ~16% of the time with sf=0.1 but 0% of the time (99% confidence) with sf=1)
+
+# Build the docker image
 docker build -t pacdb .
+
+# Run the benchmark in a docker container
+docker run -it --rm \
+    --mount type=bind,source="$(pwd)",target=/app \
+    --tmpfs /app/.venv:uid=1000,gid=1000 \
+    -w /app \
+    -e UV_PROJECT_ENVIRONMENT=/app/.venv \
+    pacdb \
+    uv sync --offline && make unnoised && make benchmark
+
+
+To generate a larger TPC-H dataset in Docker (without setup):
+-------------------------------------------------------------
+docker run -it --rm \
+    --mount type=bind,source="$(pwd)",target=/app \
+    --tmpfs /app/.venv:uid=1000,gid=1000 \
+    -w /app \
+    -e UV_PROJECT_ENVIRONMENT=/app/.venv \
+    pacdb \
+    uv sync --offline && cd data/tpch && uv run generate.py --sf 1
+
+
+To run a specific SQL query in Docker (without setup):
+-------------------------------------------------------------
+# First, put the corresponding .sql file into the ./queries folder. Then, run all steps:
 docker run -it --rm \
     --mount type=bind,source="$(pwd)",target=/app \
     --tmpfs /app/.venv:uid=1000,gid=1000 \
@@ -18,24 +58,28 @@ docker run -it --rm \
     pacdb \
     uv sync --offline && uv run autopac_duckdb_step1.py && uv run autopac_duckdb_step2.py && uv run autopac_duckdb_step3.py
 
-Setup (devcontainer):
----------------------
-Open in VSCode, then Ctrl+Shift+P > Dev Containers: Reopen in Container
 
-Setup (uv):
+
+### If you do not want to use Docker ###
+
+These are the steps for setting up PAC-DB on your local machine. At the bottom of this readme I have
+included the step-by-step commands I ran on a cloudlab machine to gather the data in the paper. The
+experiments in the paper were all run without Docker.
+
+
+Local Setup (uv):
 -----------
-curl -LsSf https://astral.sh/uv/install.sh | sh  # install uv
+# Install uv python package manager, if not already installed.
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.local/bin/env
+
+# In the repo directory, use uv to fetch all dependencies
 uv sync
 source .venv/bin/activate
 
-Setup (pip/venv):
------------------
-python3.13 -m venv .venv
-source .venv/bin/activate
-pip3 install -r requirements.txt
 
 To install the DuckDB CLI:
-------------------------------------------
+--------------------------
 Go to the releases for version 1.3.2, and copy the url for your platform: https://github.com/duckdb/duckdb/releases/tag/v1.3.2
 wget https://github.com/duckdb/duckdb/releases/download/v1.3.2/duckdb_cli-linux-amd64.zip
 # wget https://github.com/duckdb/duckdb/releases/download/v1.3.2/duckdb_cli-osx-universal.zip
@@ -43,11 +87,12 @@ unzip duckdb_cli-linux-amd64.zip
 # unzip duckdb_cli-osx-universal.zip
 mv duckdb ~/.local/bin  # add to your path, this directory is on my path
 
+
 To generate TPC-H data:
 -----------------------
 The scripts in this repository expect to find a TPC-H dataset located at ./data/tpch/tpch.duckdb.
 
-We provide ./data/tpch/tpch-sf0.1.duckdb (scale factor = 0.1) for convenience and reproducibility.
+We provide ./data/tpch/tpch-sf0.1.duckdb (scale factor = 0.1) for convenience.
 If you want to use this, then you must copy it to the expected location:
 mv ./data/tpch/tpch-sf0.1.duckdb ./data/tpch/tpch.duckdb
 
@@ -58,26 +103,96 @@ Usage for generate.py:
 cd data/tpch
 uv run generate.py --sf 1
 
-Usage:
-------
+
+To run the comparison benchmark on the dataset in ./data/tpch/tpch.duckdb:
+--------------------------------------------------------------------------
+make clean
+make unnoised
+make benchmark
+
+
+Manual usage to run a specific query
+------------------------------------
 The following steps will work to run any query you put in the ./queries folder. Make sure you don't have anything
 precious in the outputs folder.
 
 rm -r ./outputs/* 
 uv run autopac_duckdb_step1.py
-uv run autopac_duckdb_step2.py
+uv run autopac_duckdb_step2.py -mi 0.5
 uv run autopac_duckdb_step3.py
 
-There is a timing benchmark script to automating all the queries in a list: uv run timing_benchmark.py
-You will have to edit the list of queries in that file if you want to change the queries run.
-Make sure that the ./queries folder is empty when you start the script, especially if you are re-running
-after it has crashed.
+This is how the data for the privacy benchmark notebooks was obtained. You can run with multiple MIs by specifying
+the parameter multiple times in step 2:
+uv run autopac_duckdb_step2.py -mi 0.0078125 -mi 0.015625 -mi 0.03125 -mi 0.0625 -mi 0.125 -mi 0.25 -mi 0.5 -mi 1.0 -mi 2.0 -mi 4.0
 
-If you are looking at Jupyter notebooks, make sure that you are using the kernel at .venv/bin/jupyter
+If you are looking at Jupyter notebooks, make sure that you are using the kernel at .venv/bin/jupyter.
 
-To clean up before committing, delete everything except the zip files in ./outputs
 
-find ./outputs -type f ! -name "*.zip" -delete
-find ./outputs -type d -empty -delete
 
-The Makefile has some useful targets that automate many of these steps.
+### Steps for performance benchmarking on a new cloudlab.us instance ###
+
+In the paper, we use a r6615 instance from the Clemson cluster with Ubuntu 22.04.
+https://www.cloudlab.us/instantiate.php?profile=33e0df61-0f4d-11f0-828b-e4434b2381fc&rerun_instance=1a0ca66f-b60a-11f0-bc80-e4434b2381fc
+
+To reproduce, create an instance, SSH, and then run these commands:
+
+# Install uv for python
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.local/bin/env
+
+# Install monitoring programs
+sudo apt-get update && sudo apt-get install htop btop -y
+
+# Install duckdb 
+sudo apt-get update && sudo apt-get install zip unzip -y
+wget https://github.com/duckdb/duckdb/releases/download/v1.3.2/duckdb_cli-linux-amd64.zip
+unzip duckdb_cli-linux-amd64.zip
+mv duckdb ~/.local/bin
+
+# Clone repo
+git clone https://github.com/michaelnoguera/pacdb.git ~/pacdb
+
+# Install dependencies
+cd ~/pacdb
+uv sync
+
+# Generate data
+cd ~/pacdb/data/tpch
+uv run generate.py --sf 1
+
+# Run baseline (unnoised) and benchmark
+cd ~/pacdb
+make clean
+make unnoised
+make benchmark
+
+# If you want to see the outputs of the original, unnoised queries, look at
+tail -n+1 unnoised/q*.csv
+
+# If you want to see the private outputs, look at 
+tail -n+1 outputs/*step3/output.csv
+
+# If you want to see the time (in seconds) taken by the unnoised queries in DuckDB, look at
+cat unnoised/times.tsv
+
+# If you want to see the time (in seconds) taken by PAC-DB to run the queries privately, look at
+cat benchmarks/all.tsv
+
+# Zip this scale factor's results for download
+zip -r results.zip benchmarks/ unnoised/ data/tpch/last_generated.txt
+
+
+
+### Notes ###
+
+Before evaluating, generate an sf=1 database.
+
+If you get an error that looks like this from the benchmark script:
+```
+Conflict detected. Aborting.
+make: *** [benchmark] Error 1
+```
+It is a check failing because there is still a file in the ./queries folder while the benchmark script
+wants to control that folder's contents. To fix, delete the offending sql file `rm queries/*.sql`.
+This is okay because there is a copy of each query in ./queries-notnow, which is copied to ./queries
+when it is that query's turn to run.

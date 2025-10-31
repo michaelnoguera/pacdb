@@ -14,7 +14,7 @@ import pyarrow.parquet as pq  # type: ignore[import-untyped]
 
 # default scale factor is 1gb
 parser = argparse.ArgumentParser(description="Generate TPC-H parquet files.")
-parser.add_argument('--sf', type=int, default=1, help='Scale factor for TPC-H data generation (default: 1)')
+parser.add_argument('--sf', type=float, default=1, help='Scale factor for TPC-H data generation (default: 1)')
 parser.add_argument('--parquet', action='store_true', help='Export tables to parquet files')
 args = parser.parse_args()
 SCALE_FACTOR = args.sf

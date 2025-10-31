@@ -60,6 +60,11 @@ def add_pac_noise_to_sample(
         logging.warning("For %s %s, sample size (%d) is larger than the number of values (%d).", experiment, input_path.name, sample_size, len(raw_values))
         # if len(raw_values) < sample_size/2:
         add_noise = False # always return None
+    if None in raw_values:
+        logging.warning("For %s %s, a sample returned a None value, so PAC-DB refuses to answer.", experiment, input_path.name)
+        logging.warning("If this happened with a small scale factor on TPC-H, it means that no matching rows were selected" \
+                            "within one or more samples, so a larger scale factor should be used if numeric output is needed.")
+        add_noise = False # always return None
 
     releases = []
     scale = None
@@ -83,7 +88,10 @@ def add_pac_noise_to_sample(
         is_numeric = values.dtype.kind in 'biufc'
     if is_numeric:
         values = [k for k in values if not np.isnan(k)] # only one output col
-        assert(len(values) == len(raw_values)) # no output should be nan
+        if not add_noise:
+            logging.warning("Numeric output has NaNs, but this was detected so add_noise is False.")
+        else:
+            assert(len(values) == len(raw_values)) # can't add noise to a NaN so this is an error case
 
     timer.end()
 

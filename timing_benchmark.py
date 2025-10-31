@@ -11,10 +11,6 @@ import autopac_duckdb_step2 as step2
 import autopac_duckdb_step3 as step3
 
 ALLQUERIES = [
-    # "q3a-customer-naive.sql",
-    # "q3b-customer-filter-pushdown.sql",
-    # "q3c-customer-sample-pushup.sql",
-
     "q1-customer.sql",
     "q3-customer.sql",
     "q4-customer.sql",
@@ -62,6 +58,9 @@ logging.basicConfig(
     #format="%(asctime)s | %(filename)s:%(lineno)d %(levelname)s %(message)s",
     filemode='w'
 )
+
+if not os.path.exists("./data/tpch/tpch.duckdb"):
+    raise FileNotFoundError("DuckDB database file './data/tpch/tpch.duckdb' not found. Please generate the TPC-H database first.")
 
 if not os.path.exists(BENCHMARKS_FOLDER):
     os.makedirs(BENCHMARKS_FOLDER)
