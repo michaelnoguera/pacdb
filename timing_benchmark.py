@@ -59,6 +59,9 @@ logging.basicConfig(
     filemode='w'
 )
 
+if not os.path.exists("./data/tpch/tpch.duckdb"):
+    raise FileNotFoundError("DuckDB database file './data/tpch/tpch.duckdb' not found. Please generate the TPC-H database first.")
+
 if not os.path.exists(BENCHMARKS_FOLDER):
     os.makedirs(BENCHMARKS_FOLDER)
 

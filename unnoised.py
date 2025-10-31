@@ -9,6 +9,7 @@ import argparse
 import datetime
 import hashlib
 import json
+import os
 import subprocess
 import time
 
@@ -16,6 +17,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate TPC-H queries for DuckDB.")
     parser.add_argument("-q", "--query", type=int, nargs='*', help="Specific query numbers to generate (1-22). If not specified, all queries will be generated.")
     args = parser.parse_args()
+
+    if not os.path.exists("./data/tpch/tpch.duckdb"):
+        raise FileNotFoundError("DuckDB database file './data/tpch/tpch.duckdb' not found. Please generate the TPC-H database first.")
 
     query_numbers = args.query if args.query else range(1, 23)
     times = []

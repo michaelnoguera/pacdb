@@ -180,3 +180,19 @@ cat benchmarks/all.tsv
 
 # Zip this scale factor's results for download
 zip -r results.zip benchmarks/ unnoised/ data/tpch/last_generated.txt
+
+
+
+### Notes ###
+
+Before evaluating, generate an sf=1 database.
+
+If you get an error that looks like this from the benchmark script:
+```
+Conflict detected. Aborting.
+make: *** [benchmark] Error 1
+```
+It is a check failing because there is still a file in the ./queries folder while the benchmark script
+wants to control that folder's contents. To fix, delete the offending sql file `rm queries/*.sql`.
+This is okay because there is a copy of each query in ./queries-notnow, which is copied to ./queries
+when it is that query's turn to run.
