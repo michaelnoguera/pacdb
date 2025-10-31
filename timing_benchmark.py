@@ -11,10 +11,6 @@ import autopac_duckdb_step2 as step2
 import autopac_duckdb_step3 as step3
 
 ALLQUERIES = [
-    # "q3a-customer-naive.sql",
-    # "q3b-customer-filter-pushdown.sql",
-    # "q3c-customer-sample-pushup.sql",
-
     "q1-customer.sql",
     "q3-customer.sql",
     "q4-customer.sql",
