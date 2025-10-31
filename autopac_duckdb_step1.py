@@ -1,12 +1,9 @@
 import os
 
-import nbconvert
-import nbformat
-import papermill as pm
 import parse
 
-from timer import Timer
 import autopac_duckdb_step1_flat as step1
+from timer import Timer
 
 QUERYFOLDER = "./queries"
 
