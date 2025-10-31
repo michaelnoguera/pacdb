@@ -130,8 +130,11 @@ If you are looking at Jupyter notebooks, make sure that you are using the kernel
 
 
 ### Steps for performance benchmarking on a new cloudlab.us instance ###
-In the paper, we use a r6615 instance from the Clemson cluster with Ubuntu 22.04. To reproduce,
-create an instance, SSH, and then run these commands:
+
+In the paper, we use a r6615 instance from the Clemson cluster with Ubuntu 22.04.
+https://www.cloudlab.us/instantiate.php?profile=33e0df61-0f4d-11f0-828b-e4434b2381fc&rerun_instance=1a0ca66f-b60a-11f0-bc80-e4434b2381fc
+
+To reproduce, create an instance, SSH, and then run these commands:
 
 # Install uv for python
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -147,7 +150,7 @@ unzip duckdb_cli-linux-amd64.zip
 mv duckdb ~/.local/bin
 
 # Clone repo
-git clone git@github.com:michaelnoguera/pacdb.git
+git clone https://github.com/michaelnoguera/pacdb.git ~/pacdb
 
 # Install dependencies
 cd ~/pacdb
@@ -157,10 +160,23 @@ uv sync
 cd ~/pacdb/data/tpch
 uv run generate.py --sf 1
 
-# Run benchmark
+# Run baseline (unnoised) and benchmark
 cd ~/pacdb
 make clean
+make unnoised
 make benchmark
 
-# Zip results for download
+# If you want to see the outputs of the original, unnoised queries, look at
+tail -n+1 unnoised/q*.csv
+
+# If you want to see the private outputs, look at 
+tail -n+1 outputs/*step3/output.csv
+
+# If you want to see the time (in seconds) taken by the unnoised queries in DuckDB, look at
+cat unnoised/times.tsv
+
+# If you want to see the time (in seconds) taken by PAC-DB to run the queries privately, look at
+cat benchmarks/all.tsv
+
+# Zip this scale factor's results for download
 zip -r results.zip benchmarks/ unnoised/ data/tpch/last_generated.txt
