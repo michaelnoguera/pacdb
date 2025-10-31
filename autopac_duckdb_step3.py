@@ -1,6 +1,5 @@
 import os
 import pickle
-from contextlib import redirect_stdout
 
 import parse
 
