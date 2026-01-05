@@ -122,12 +122,11 @@ def add_pac_noise_to_sample(
 
     sample_size = entry.get("samples", 0)
     add_noise = True
+    is_numeric = True
     if len(raw_values) < sample_size or None in raw_values or nan_check(raw_values):
         logging.warning(
             "For %s %s, sample size (%d) is larger than the number of values (%d).", experiment, input_path.name, sample_size, len(raw_values))
         is_numeric = False
-    releases = []
-    scale = None
     # Determine if numeric type
     try:
         series = pl.Series("v", raw_values)
@@ -135,8 +134,8 @@ def add_pac_noise_to_sample(
             series = series.cast(eval(f"pl.{dtype_str}"))
         except Exception:
             series = series.cast(pl.Float64)
-
-        is_numeric = series.dtype.is_numeric()
+        if is_numeric:
+            is_numeric = series.dtype.is_numeric()
 
         if series.dtype.is_decimal():
             series = series.cast(pl.Float64)
@@ -145,7 +144,8 @@ def add_pac_noise_to_sample(
     except Exception:
         logging.warning("Polars cast failed. Attempting numpy conversion.")
         values = np.array(raw_values)
-        is_numeric = values.dtype.kind in 'biufc'
+        if is_numeric:
+            is_numeric = values.dtype.kind in 'biufc'
     if is_numeric:
         values = [k for k in values if not np.isnan(k)] # only one output col
         assert(len(values) == len(raw_values)) # can't add noise to a NaN so this is an error case
