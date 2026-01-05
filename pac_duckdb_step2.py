@@ -11,7 +11,9 @@ from timer import Timer
 
 # Default max mutual information bound
 DEFAULT_MI = 1/2
-NUM_TRIALS = 1000
+NUM_TRIALS = 10
+NULL_VAL = 'null'
+
 
 class CustomEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -60,7 +62,6 @@ def add_noise_numeric(values, mi):
     return scale, releases
 
 def add_noise_categorical(values, mi):
-    null_val = 'null'
     modified = []
     for v in values:
         if v is None or isinstance(v, (float, np.floating)) and np.isnan(v):
@@ -83,7 +84,10 @@ def add_noise_categorical(values, mi):
         for dim_ind in range(len(one_hot_rep)):
             one_hot_rep[dim_ind] += np.random.normal(loc=0, scale = np.sqrt(per_dim_scale[dim_ind]))
         release = idx_to_cat[np.argmax(one_hot_rep)]
-        releases.append(release)
+        if release == NULL_VAL:
+            releases.append(None)
+        else:
+            releases.append(release)
     return per_dim_scale, releases
 
 def add_pac_noise_to_sample(
@@ -123,30 +127,30 @@ def add_pac_noise_to_sample(
     sample_size = entry.get("samples", 0)
     add_noise = True
     is_numeric = True
+    num_nulls = 0.
     if len(raw_values) < sample_size or None in raw_values or nan_check(raw_values):
-        logging.warning(
-            "For %s %s, sample size (%d) is larger than the number of values (%d).", experiment, input_path.name, sample_size, len(raw_values))
+        # logging.warning(
+        #     "For %s %s, sample size (%d) is larger than the number of values (%d).", experiment, input_path.name, sample_size, len(raw_values))
         is_numeric = False
+        num_nulls = sample_size - len(raw_values)
     # Determine if numeric type
-    try:
-        series = pl.Series("v", raw_values)
+    if is_numeric:
         try:
-            series = series.cast(eval(f"pl.{dtype_str}"))
-        except Exception:
-            series = series.cast(pl.Float64)
-        if is_numeric:
+            series = pl.Series("v", raw_values)
+            try:
+                series = series.cast(eval(f"pl.{dtype_str}"))
+            except Exception:
+                series = series.cast(pl.Float64)
             is_numeric = series.dtype.is_numeric()
 
-        if series.dtype.is_decimal():
-            series = series.cast(pl.Float64)
+            if series.dtype.is_decimal():
+                series = series.cast(pl.Float64)
 
-        values = series.to_numpy()
-    except Exception:
-        logging.warning("Polars cast failed. Attempting numpy conversion.")
-        values = np.array(raw_values)
-        if is_numeric:
+            values = series.to_numpy()
+        except Exception:
+            logging.warning("Polars cast failed. Attempting numpy conversion.")
+            values = np.array(raw_values)
             is_numeric = values.dtype.kind in 'biufc'
-    if is_numeric:
         values = [k for k in values if not np.isnan(k)] # only one output col
         assert(len(values) == len(raw_values)) # can't add noise to a NaN so this is an error case
 
@@ -156,7 +160,8 @@ def add_pac_noise_to_sample(
     if is_numeric:
         scale, releases = add_noise_numeric(values, mi)
     else:
-        scale, releases = add_noise_categorical(values, mi)
+        raw_values.extend([NULL_VAL]*num_nulls)
+        scale, releases = add_noise_categorical(raw_values, mi)
 
     timer.end()
 
