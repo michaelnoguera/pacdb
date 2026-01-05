@@ -20,6 +20,72 @@ class CustomEncoder(json.JSONEncoder):
         except TypeError:
             return str(obj)
 
+def nan_check(values):
+    return any(
+        isinstance(x, (float, np.floating)) and np.isnan(x)
+        for x in values
+    )
+
+def add_noise_numeric(values, mi):
+
+    # Compute per-coordinate noise scale: variance / (2 * mi)
+    arr_2d = np.stack([np.atleast_1d(v) for v in values], axis=-1)
+    variances = np.var(arr_2d, axis=1)
+    scale = variances / (2 * mi)
+    assert len(scale) == 1
+    assert np.nan not in values
+    scale = scale[0]
+
+    logging.debug("Stacked array shape: %s", arr_2d.shape)
+    logging.debug("Calculated variances: %s", variances)
+    logging.debug("Noise scale per coordinate (variance/(2*%s)): %s", mi, scale)
+    logging.debug(
+        "Numeric type detected. Processing %d numeric samples.", len(values)
+    )
+    releases = []
+    for _ in range(NUM_TRIALS):
+        sample = np.random.choice(values)
+        # Compute noise for numeric types
+        # Ensure scale is a valid float or array of floats
+        if scale is None or np.any(np.isnan(scale)):
+            raise ValueError("Noise scale is invalid (None or NaN).")
+        noise = np.random.normal(loc=0, scale=np.sqrt(scale))
+        release = sample + noise
+        releases.append(release)
+
+        logging.debug(
+            "Selected sample: %s; noise: %s; release: %s",
+            sample, noise, release
+        )
+    return scale, releases
+
+def add_noise_categorical(values, mi):
+    null_val = 'null'
+    modified = []
+    for v in values:
+        if v is None or isinstance(v, (float, np.floating)) and np.isnan(v):
+            modified.append(null_val)
+        else:
+            modified.append(v)
+    categories, encoded = np.unique(modified, return_inverse=True)
+    cat_to_idx = {cat: i for i, cat in enumerate(categories)}
+    idx_to_cat = {i: cat for i, cat in enumerate(categories)}
+    one_hot_encodings = np.eye(len(categories))[encoded]
+    dims = one_hot_encodings.shape[1]
+    variances_per_dim = np.var(one_hot_encodings, axis=0)
+    sqrt_total_var = sum([variances_per_dim[x]**0.5 for x in range(len(variances_per_dim))])
+    per_dim_scale = [1./(2*mi) * variances_per_dim[ind]**0.5 * sqrt_total_var for ind in range(dims)]
+    releases = []
+    for _ in range(NUM_TRIALS):
+        sample = np.random.choice(modified)
+        one_hot_rep = np.zeros(len(cat_to_idx))
+        one_hot_rep[cat_to_idx[sample]] = 1
+        for dim_ind in range(len(one_hot_rep)):
+            one_hot_rep[dim_ind] += np.random.normal(loc=0, scale = np.sqrt(per_dim_scale[dim_ind]))
+        release = idx_to_cat[np.argmax(one_hot_rep)]
+        releases.append(release)
+    return per_dim_scale, releases
+
 def add_pac_noise_to_sample(
     input_path: Union[str, Path],
     max_mi: float = DEFAULT_MI,
@@ -56,16 +122,10 @@ def add_pac_noise_to_sample(
 
     sample_size = entry.get("samples", 0)
     add_noise = True
-    if len(raw_values) < sample_size:
-        logging.warning("For %s %s, sample size (%d) is larger than the number of values (%d).", experiment, input_path.name, sample_size, len(raw_values))
-        # if len(raw_values) < sample_size/2:
-        add_noise = False # always return None
-    if None in raw_values:
-        logging.warning("For %s %s, a sample returned a None value, so PAC-DB refuses to answer.", experiment, input_path.name)
-        logging.warning("If this happened with a small scale factor on TPC-H, it means that no matching rows were selected" \
-                            "within one or more samples, so a larger scale factor should be used if numeric output is needed.")
-        add_noise = False # always return None
-
+    if len(raw_values) < sample_size or None in raw_values or nan_check(raw_values):
+        logging.warning(
+            "For %s %s, sample size (%d) is larger than the number of values (%d).", experiment, input_path.name, sample_size, len(raw_values))
+        is_numeric = False
     releases = []
     scale = None
     # Determine if numeric type
@@ -88,93 +148,16 @@ def add_pac_noise_to_sample(
         is_numeric = values.dtype.kind in 'biufc'
     if is_numeric:
         values = [k for k in values if not np.isnan(k)] # only one output col
-        if not add_noise:
-            logging.warning("Numeric output has NaNs, but this was detected so add_noise is False.")
-        else:
-            assert(len(values) == len(raw_values)) # can't add noise to a NaN so this is an error case
+        assert(len(values) == len(raw_values)) # can't add noise to a NaN so this is an error case
 
     timer.end()
 
     timer.start("compute_variance_and_release")
-    frac_nulls = 0
-    if not add_noise:
-        frac_nulls = NUM_TRIALS
-    elif is_numeric:
-        assert add_noise
-        
-        # Compute per-coordinate noise scale: variance / (2 * mi)
-        arr_2d = np.stack([np.atleast_1d(v) for v in values], axis=-1)
-        variances = np.var(arr_2d, axis=1)
-        if np.isnan(variances):
-            variances = np.nanvar(arr_2d, axis=1)
-            logging.warning("Output query is sometimes NaN!")
-        scale = variances / (2 * mi)
-        assert len(scale) == 1
-        scale = scale[0]
-
-        logging.debug("Stacked array shape: %s", arr_2d.shape)
-        logging.debug("Calculated variances: %s", variances)
-        logging.debug("Noise scale per coordinate (variance/(2*%s)): %s", mi, scale)
-        logging.debug(
-            "Numeric type '%s' detected. Processing %d numeric samples.",
-            dtype_str, len(values)
-        )
-
-        for _ in range(NUM_TRIALS):
-
-            # Choose a sample at random
-            frac_samples = len(values) / sample_size
-            logging.debug(f'frac_samples: {frac_samples}')
-            if frac_samples != 1:
-                assert(False)
-            sample = np.random.choice(values)
-
-            if add_noise and not np.isnan(sample):
-                # Compute noise for numeric types
-                # Ensure scale is a valid float or array of floats
-                if scale is None or np.any(np.isnan(scale)):
-                    raise ValueError("Noise scale is invalid (None or NaN).")
-                noise = np.random.normal(loc=0, scale=np.sqrt(scale))
-                release = sample + noise
-                releases.append(release)
-            else:
-                if np.isnan(sample):
-                    sample = None
-                    assert(False)
-                    frac_nulls += 1
-                release = None
-                noise = None
-
-            logging.debug(
-                "Selected sample: %s; noise: %s; release: %s",
-                sample, noise, release
-            )
+    if is_numeric:
+        scale, releases = add_noise_numeric(values, mi)
     else:
-        noise = 'uniform'
-        unique_values = list(set(values))
-        logging.debug("Num unique values: %s", len(unique_values))
-        for _ in range(NUM_TRIALS):
-            # Choose a sample at random
-            frac_samples = len(values) / sample_size
-            if frac_samples != 1:
-                assert(False)
-            logging.debug(f'frac_samples: {frac_samples}')
-            if np.random.rand() < frac_samples:
-                sample = np.random.choice(values)
-            else:
-                sample = None
+        scale, releases = add_noise_categorical(values, mi)
 
-            if sample is not None:
-                release = np.random.choice(unique_values)
-                releases.append(release)
-            else:
-                frac_nulls += 1
-                release = None
-
-            logging.debug(
-                "Selected sample: %s; noise: %s; release: %s",
-                sample, noise, release
-            )
     timer.end()
 
     timer.start("write_json")
@@ -183,8 +166,7 @@ def add_pac_noise_to_sample(
         "row": entry.get("row"),
         "scale": scale,
         "dtype": dtype_str,
-        "value": releases if len(releases) > 0 else [None],
-        "frac_nulls": frac_nulls / NUM_TRIALS
+        "value": releases,
     }
 
     if output_path:
