@@ -74,6 +74,7 @@ def add_noise_categorical(values, mi):
     one_hot_encodings = np.eye(len(categories))[encoded]
     dims = one_hot_encodings.shape[1]
     variances_per_dim = np.var(one_hot_encodings, axis=0)
+    assert dims == len(variances_per_dim)
     sqrt_total_var = sum([variances_per_dim[x]**0.5 for x in range(len(variances_per_dim))])
     per_dim_scale = [1./(2*mi) * variances_per_dim[ind]**0.5 * sqrt_total_var for ind in range(dims)]
     releases = []
@@ -127,7 +128,7 @@ def add_pac_noise_to_sample(
     sample_size = entry.get("samples", 0)
     add_noise = True
     is_numeric = True
-    num_nulls = 0.
+    num_nulls = 0
     if len(raw_values) < sample_size or None in raw_values or nan_check(raw_values):
         # logging.warning(
         #     "For %s %s, sample size (%d) is larger than the number of values (%d).", experiment, input_path.name, sample_size, len(raw_values))
@@ -151,8 +152,9 @@ def add_pac_noise_to_sample(
             logging.warning("Polars cast failed. Attempting numpy conversion.")
             values = np.array(raw_values)
             is_numeric = values.dtype.kind in 'biufc'
-        values = [k for k in values if not np.isnan(k)] # only one output col
-        assert(len(values) == len(raw_values)) # can't add noise to a NaN so this is an error case
+        if is_numeric:
+            values = [k for k in values if not np.isnan(k)] # only one output col
+            assert(len(values) == len(raw_values)) # can't add noise to a NaN so this is an error case
 
     timer.end()
 
