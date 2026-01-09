@@ -136,6 +136,15 @@ https://www.cloudlab.us/instantiate.php?profile=33e0df61-0f4d-11f0-828b-e4434b23
 
 To reproduce, create an instance, SSH, and then run these commands:
 
+# If you are using an r6615 cloudlab machine, by default the root filesystem only uses
+# 63GB of a 1TB SSD. These steps resize the root filesystem to use the remaining space.
+# Do not blindly copy and paste if you are not using an r6615 cloudlab machine.
+
+#sudo apt-get install cloud-utils
+#sudo growpart /dev/nvme0n1 3
+#sudo partprobe /dev/nvme0n1
+#sudo resize2fs /dev/nvme0n1p3
+
 # Install uv for python
 curl -LsSf https://astral.sh/uv/install.sh | sh
 source $HOME/.local/bin/env
