@@ -20,7 +20,10 @@ python-preference = "only-managed"
 [tool.ruff]
 show-fixes = true
 line-length = 150
-extend-select = ["I"]
+extend-exclude = ["notebooks/*"]
+
+[tool.ruff.lint]
+extend-select = ["E", "F", "I"]
 
 [tool.mypy]
 strict = false

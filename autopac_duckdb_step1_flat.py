@@ -47,7 +47,7 @@ def main(
     logger.info("Connecting to DuckDB database at data/tpch/tpch.duckdb")
     con = duckdb.connect(database='data/tpch/tpch.duckdb', read_only=True)
     logger.info("DuckDB connection established.")
-    tables = ["customer", "lineitem", "nation", "orders", "part", "partsupp", "region", "supplier"]
+    tables = ["customer", "lineitem", "nation", "orders", "part", "partsupp", "region", "supplier"]  # noqa: F841
     #for t in tables:
     #    con.execute(f"CREATE TABLE {t} AS SELECT * FROM 'data/tpch/{t}.parquet'")
     timer.end()
@@ -68,7 +68,8 @@ def main(
     logger.info("random_samples table created.")
     timer.end()
 
-    # The randomness of what rows are chosen is saved to disk in `random_binary.json`. For each sample #, there is an array with one entry per row, where 1 means the row was chosen and 0 means it was not.
+    # The randomness of what rows are chosen is saved to disk in `random_binary.json`.
+    # For each sample #, there is an array with one entry per row, where 1 means the row was chosen and 0 means it was not.
 
 
 
@@ -193,7 +194,8 @@ def main(
 
 
 
-    # Write all table entries in the output table to their own JSON files. Each file has a number, the information of which file corresponds to which table entry
+    # Write all table entries in the output table to their own JSON files.
+    # Each file has a number, the information of which file corresponds to which table entry
     # is stored in reverse_map.json (as well as in the files themselves)
     timer.start("write_json_files")
     logger.info("Writing output JSON files for each group and column.")

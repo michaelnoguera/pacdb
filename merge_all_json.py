@@ -1,8 +1,8 @@
 import glob
 import json
-import os
 import pathlib
 import re
+
 
 def merge_benchmark_files(benchmark_folder):
     # Pattern to match all the benchmark files

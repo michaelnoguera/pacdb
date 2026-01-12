@@ -4,11 +4,10 @@
 # In[3]:
 
 
-import polars as pl
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib_inline.backend_inline
-from matplotlib.rcsetup import cycler
+import polars as pl
 
 #sns.reset_orig()
 

@@ -15,7 +15,8 @@ import time
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate TPC-H queries for DuckDB.")
-    parser.add_argument("-q", "--query", type=int, nargs='*', help="Specific query numbers to generate (1-22). If not specified, all queries will be generated.")
+    parser.add_argument("-q", "--query", type=int, nargs='*', 
+                        help="Specific query numbers to generate (1-22). If not specified, all queries will be generated.")
     args = parser.parse_args()
 
     if not os.path.exists("./data/tpch/tpch.duckdb"):

@@ -3,7 +3,6 @@ Timer utility for measuring elapsed time and logging it to a CSV file.
 """
 
 import csv
-import logging
 import os
 import time
 from dataclasses import asdict, dataclass, field

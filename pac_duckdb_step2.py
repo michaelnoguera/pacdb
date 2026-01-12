@@ -65,7 +65,7 @@ def add_noise_categorical(values, mi):
     modified = []
     for v in values:
         if v is None or isinstance(v, (float, np.floating)) and np.isnan(v):
-            modified.append(null_val)
+            modified.append(NULL_VAL)
         else:
             modified.append(v)
     categories, encoded = np.unique(modified, return_inverse=True)
@@ -126,7 +126,6 @@ def add_pac_noise_to_sample(
     raw_values = entry.get("values", [])
 
     sample_size = entry.get("samples", 0)
-    add_noise = True
     is_numeric = True
     num_nulls = 0
     if len(raw_values) < sample_size or None in raw_values or nan_check(raw_values):
