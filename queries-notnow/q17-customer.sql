@@ -29,28 +29,28 @@ ORDER BY sample_id, row_id;
 DEALLOCATE PREPARE run_query;
 
 PREPARE run_query AS 
+WITH lineitem_sampled AS (
+    SELECT * FROM lineitem
+    JOIN orders ON l_orderkey = o_orderkey
+    JOIN customer c ON o_custkey = c.c_custkey
+    JOIN random_samples rs ON c.rowid = rs.row_id 
+        AND rs.sample_id = $sample 
+        AND rs.random_binary = TRUE
+)
 SELECT
     sum(l_extendedprice) / 7.0 AS avg_yearly
 FROM
-    lineitem,
-    part,
-    orders,
-    customer,
-    random_samples AS rs
+    lineitem_sampled,
+    part
 WHERE
-    rs.row_id = customer.rowid
-    AND rs.random_binary = TRUE
-    AND rs.sample_id = $sample
-    AND o_custkey = c_custkey
-    AND o_orderkey = l_orderkey
-    AND p_partkey = l_partkey
+    p_partkey = l_partkey
     AND p_brand = 'Brand#23'
     AND p_container = 'MED BOX'
     AND l_quantity < (
         SELECT
             0.2 * avg(l_quantity)
         FROM
-            lineitem
+            lineitem_sampled
         WHERE
             l_partkey = p_partkey);
 --end PREPARE_STEP--
