@@ -81,6 +81,8 @@ def add_noise_categorical(values, mi):
     sqrt_total_var = sum([variances_per_dim[x]**0.5 for x in range(len(variances_per_dim))])
     per_dim_scale = [1./(2*mi) * variances_per_dim[ind]**0.5 * sqrt_total_var for ind in range(dims)]
 
+    """
+    This is the unvectorized version, kept for reference
     releases = []
     for _ in range(NUM_TRIALS):
         sample_idx = np.random.choice(encoded) # categories[idx] gives the randomly chosen category
@@ -96,6 +98,25 @@ def add_noise_categorical(values, mi):
         release = categories[release_cat_idx]
 
         releases.append(None if release == NULL_VAL else release)
+    """
+
+    ### Vectorized categorical noise addition and release
+
+    # sample_indices contains NUM_TRIALS samples. Each idx in sample_indices corresponds to a chosen category categories[idx]
+    sample_indices = np.random.choice(encoded, size=NUM_TRIALS)
+
+    # Instead of adding noise to existing one-hot vectors, we add the one-hot to existing noise vectors. This is
+    # faster because it can be done all at once. See reference implementation above for explanation.
+    std_devs = np.sqrt(per_dim_scale)
+    num_categories = len(categories)
+    noise = np.random.normal(loc=0, scale=std_devs, size=(NUM_TRIALS, num_categories)) # noise per sample
+    noise[np.arange(NUM_TRIALS), sample_indices] += 1  # the "one-hot" part per sample
+
+    release_cat_indices = np.argmax(noise, axis=1)  # index of max per row
+    releases = np.array(categories)[release_cat_indices]
+    releases = np.where(releases == NULL_VAL, None, releases)
+    releases = releases.tolist()
+
     return per_dim_scale, releases
 
 
@@ -171,8 +192,10 @@ def add_pac_noise_to_sample(
 
     timer.start("compute_variance_and_release")
     if is_numeric:
+        logging.info("Treating as numeric.")
         scale, releases = add_noise_numeric(values, mi)
     else:
+        logging.info("Treating as categorical.")
         scale, releases = add_noise_categorical(values, mi)
     timer.end()
 
