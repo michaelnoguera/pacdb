@@ -2,7 +2,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -23,41 +23,22 @@ class CustomEncoder(json.JSONEncoder):
         except TypeError:
             return str(obj)
 
+# given sample_size samples of the same result, compute variance and add noise according
+# to PAC mechanism. returns a list of NUM_TRIALS noisy releases
+def add_noise_numeric(values: list[np.number], mi: float) -> tuple[list[float], list]:
+    variance = np.var(values)
+    scale = variance / (2 * mi)
 
-def add_noise_numeric(values, mi):
+    assert scale is not None and not np.isnan(scale)
 
-    # Compute per-coordinate noise scale: variance / (2 * mi)
-    arr_2d = np.stack([np.atleast_1d(v) for v in values], axis=-1)
-    variances = np.var(arr_2d, axis=1)
-    scale = variances / (2 * mi)
-    assert len(scale) == 1
-    assert np.nan not in values
-    scale = scale[0]
+    samples = np.random.choice(values, size=NUM_TRIALS) # pick a random sample for each of the NUM_TRIALS releases
+    noise = np.random.normal(loc=0, scale=np.sqrt(scale), size=NUM_TRIALS)  # corresponding array of NUM_TRIALS noise values
+    releases = samples + noise
 
-    # logging.debug("Stacked array shape: %s", arr_2d.shape)
-    # logging.debug("Calculated variances: %s", variances)
-    # logging.debug("Noise scale per coordinate (variance/(2*%s)): %s", mi, scale)
-    # logging.debug(
-    #     "Numeric type detected. Processing %d numeric samples.", len(values)
-    # )
-    releases = []
-    for _ in range(NUM_TRIALS):
-        sample = np.random.choice(values)
-        # Compute noise for numeric types
-        # Ensure scale is a valid float or array of floats
-        if scale is None or np.any(np.isnan(scale)):
-            raise ValueError("Noise scale is invalid (None or NaN).")
-        noise = np.random.normal(loc=0, scale=np.sqrt(scale))
-        release = sample + noise
-        releases.append(release)
+    # make scale into a one-element list for consistency with categorical case
+    return [scale], releases
 
-        # logging.debug(
-        #     "Selected sample: %s; noise: %s; release: %s",
-        #     sample, noise, release
-        # )
-    return scale, releases
-
-def add_noise_categorical(values, mi):
+def add_noise_categorical(values: list[Any], mi: float) -> tuple[list[float], list]:
     # all None, NULL_VAL, and NaN values are treated as a single null category
     mask_null = [
         (v is None) or (v == NULL_VAL) or (isinstance(v, (float, np.floating)) and np.isnan(v))
