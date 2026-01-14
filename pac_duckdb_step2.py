@@ -88,10 +88,9 @@ def add_noise_categorical(values, mi):
         # create one-hot representation
         one_hot_rep = np.zeros(len(categories))
         one_hot_rep[sample_idx] = 1  # set the hot component to 1
-
-        for dim_ind in range(len(one_hot_rep)):
-            one_hot_rep[dim_ind] += np.random.normal(loc=0, scale = np.sqrt(per_dim_scale[dim_ind])) # add noise to each dimension
         
+        one_hot_rep += np.random.normal(loc=0, scale=np.sqrt(per_dim_scale))  # add noise to each dimension
+
         # the dimension with the highest value is the category to be released
         release_cat_idx = np.argmax(one_hot_rep)
         release = categories[release_cat_idx]
