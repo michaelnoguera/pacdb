@@ -12,7 +12,6 @@ import autopac_duckdb_step3 as step3
 
 ALLQUERIES = [
     "q1-customer.sql",
-    "q3-customer.sql",
     "q4-customer.sql",
     "q5-customer.sql",
     "q6-customer.sql",

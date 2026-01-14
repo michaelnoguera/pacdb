@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import Any, Optional, Union
 
 import numpy as np
-import pandas as pd
 import polars as pl
+from pandas import NA as pd_NA
+from pandas import factorize as pd_factorize
 
 from timer import Timer
 
@@ -18,10 +19,14 @@ NULL_VAL = pl.Null() # Use polars null as sentinel value for null categories
 
 class CustomEncoder(json.JSONEncoder):
     def default(self, obj):
-        try:
-            return super().default(obj)
-        except TypeError:
-            return str(obj)
+        if type(obj).__module__ == np.__name__:
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            else:
+                return obj.item()
+        # if isinstance(obj, pl.Null):
+        #     return None
+        return json.JSONEncoder.default(self, obj)
 
 # given sample_size samples of the same result, compute variance and add noise according
 # to PAC mechanism. returns a list of NUM_TRIALS noisy releases
@@ -45,8 +50,8 @@ def add_noise_categorical(values: list[Any], mi: float) -> tuple[list[float], li
         for v in values
     ]
 
-    modified = np.where(mask_null, pd.NA, values)  # use np.nan to work with pd.factorize
-    encoded, categories  = pd.factorize(modified, use_na_sentinel=True)
+    modified = np.where(mask_null, pd_NA, values)  # use np.nan to work with pd.factorize
+    encoded, categories  = pd_factorize(modified, use_na_sentinel=True)
 
     # Convert back from np.nan to NULL_VAL sentinel (because nan is unequal to itself but the sentinel is)
     if any(mask_null):
@@ -110,10 +115,8 @@ def add_pac_noise_to_sample(
     step: str = "step2",
 ) -> dict:
     # Configure logging level
-    logging.basicConfig(
-        level=logging.INFO if verbose else logging.WARNING,
-        format="%(asctime)s | %(filename)s:%(lineno)d %(levelname)s %(message)s"
-    )
+    if verbose:
+        logging.getLogger().setLevel(logging.INFO)
 
     mi = max_mi
     input_path = Path(input_path)
