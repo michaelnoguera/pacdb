@@ -8,7 +8,7 @@ benchmark:
 	@bash -c 'comm -12 \
 		<(find ./queries -type f ! -name ".*" -exec basename {} \; | sort) \
 		<(find ./queries-notnow -type f ! -name ".*" -exec basename {} \; | sort) \
-		| grep . && { echo "Conflict detected. Aborting." >&2; exit 1; } || exit 0'
+		| grep . && { echo "There is a query in the queries folder. The benchmark script needs to automatically copy files to the query folder, so it must be empty to start. To use the benchmark script please empty the queries folder." >&2; exit 1; } || exit 0'
 	find ./queries -type f ! -name '.*' -exec mv -n {} ./queries-notnow/ \;
 	uv run timing_benchmark.py
 	# jq -s ' \
