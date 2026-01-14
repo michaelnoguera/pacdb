@@ -186,6 +186,6 @@ def run_step_3(
 
     timer.start("write_output_json")
     df.write_json(os.path.join(OUTPUT_DIR, 'output.json'))
-    df_single_val.write_csv(os.path.join(OUTPUT_DIR, 'output.csv'))
+    df_single_val.write_csv(os.path.join(OUTPUT_DIR, 'output.csv'), null_value="NULL", quote_style="non_numeric")
     timer.end()
 

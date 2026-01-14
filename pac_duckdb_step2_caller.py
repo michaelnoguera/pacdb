@@ -43,7 +43,7 @@ def run_batch_pac_noise_step2(
             input_file = os.path.join(input_dir, filename)
             output_file = os.path.join(output_dir, f"{n}.json")
 
-            logging.debug(f"Processing {input_file} -> {output_file}")
+            #logging.debug(f"Processing {input_file} -> {output_file}")
             add_pac_noise_to_sample(
                 input_path=input_file,
                 max_mi=max_mi,

@@ -6,13 +6,23 @@ from typing import Optional, Union
 
 import numpy as np
 import polars as pl
+import pandas as pd
 
 from timer import Timer
+
+# class NullCategory:
+#     """A unique class to represent null category values."""
+#     def __repr__(self):
+#         return "NULL"
+#     def __eq__(self, other):
+#         return isinstance(other, NullCategory)
+#     def __hash__(self):
+#         return object.__hash__(self)
 
 # Default max mutual information bound
 DEFAULT_MI = 1/2
 NUM_TRIALS = 1000
-NULL_VAL = 'null'
+NULL_VAL = pl.Null() #NullCategory() # A unique sentinel value for null categories
 
 
 class CustomEncoder(json.JSONEncoder):
@@ -22,11 +32,6 @@ class CustomEncoder(json.JSONEncoder):
         except TypeError:
             return str(obj)
 
-def nan_check(values):
-    return any(
-        isinstance(x, (float, np.floating)) and np.isnan(x)
-        for x in values
-    )
 
 def add_noise_numeric(values, mi):
 
@@ -38,12 +43,12 @@ def add_noise_numeric(values, mi):
     assert np.nan not in values
     scale = scale[0]
 
-    logging.debug("Stacked array shape: %s", arr_2d.shape)
-    logging.debug("Calculated variances: %s", variances)
-    logging.debug("Noise scale per coordinate (variance/(2*%s)): %s", mi, scale)
-    logging.debug(
-        "Numeric type detected. Processing %d numeric samples.", len(values)
-    )
+    # logging.debug("Stacked array shape: %s", arr_2d.shape)
+    # logging.debug("Calculated variances: %s", variances)
+    # logging.debug("Noise scale per coordinate (variance/(2*%s)): %s", mi, scale)
+    # logging.debug(
+    #     "Numeric type detected. Processing %d numeric samples.", len(values)
+    # )
     releases = []
     for _ in range(NUM_TRIALS):
         sample = np.random.choice(values)
@@ -55,41 +60,60 @@ def add_noise_numeric(values, mi):
         release = sample + noise
         releases.append(release)
 
-        logging.debug(
-            "Selected sample: %s; noise: %s; release: %s",
-            sample, noise, release
-        )
+        # logging.debug(
+        #     "Selected sample: %s; noise: %s; release: %s",
+        #     sample, noise, release
+        # )
     return scale, releases
 
 def add_noise_categorical(values, mi):
-    modified = []
-    for v in values:
-        if v is None or isinstance(v, (float, np.floating)) and np.isnan(v):
-            modified.append(NULL_VAL)
-        else:
-            modified.append(v)
-    categories, encoded = np.unique(modified, return_inverse=True)
-    cat_to_idx = {cat: i for i, cat in enumerate(categories)}
+    # all None, NULL_VAL, and NaN values are treated as a single null category
+    mask_null = [
+        (v is None) or (v == NULL_VAL) or (isinstance(v, (float, np.floating)) and np.isnan(v))
+        for v in values
+    ]
+
+    modified = np.where(mask_null, pd.NA, values)  # use np.nan to work with pd.factorize
+    #print("modified1:", modified)
+    encoded, categories  = pd.factorize(modified, use_na_sentinel=True)
+    #categories, encoded = np.unique(modified, return_inverse=True, equal_nan=True)
+
+    # Convert back from np.nan to NULL_VAL sentinel (because nan is unequal to itself but the sentinel is)
+    #categories = np.where((isinstance(categories, (float, np.floating)) and np.isnan(categories)), NULL_VAL, categories)
+    #modified = np.where(mask_null, NULL_VAL, values).tolist()
+
+    if any(mask_null):
+        modified = np.where(mask_null, pl.Null(), values)
+        categories = np.append(categories, pl.Null())  # ensure NULL_VAL is the last category
+    #print("categories:", categories)
+    #print("encoded:", encoded)
+
+    cat_to_idx = {cat: i for i, cat in enumerate(categories)} # map category to index of the one hot vector in categories array
+    assert all(cat_to_idx[categories[i]] == i for i in range(len(categories)))
     idx_to_cat = {i: cat for i, cat in enumerate(categories)}
-    one_hot_encodings = np.eye(len(categories))[encoded]
+    one_hot_encodings = np.eye(len(categories))[encoded] # everything is a [1, 0, 0,...] vector now, 2d numpy array
+
     dims = one_hot_encodings.shape[1]
-    variances_per_dim = np.var(one_hot_encodings, axis=0)
+    variances_per_dim = np.var(one_hot_encodings, axis=0) # 1d numpy array of variances
     assert dims == len(variances_per_dim)
+
     sqrt_total_var = sum([variances_per_dim[x]**0.5 for x in range(len(variances_per_dim))])
     per_dim_scale = [1./(2*mi) * variances_per_dim[ind]**0.5 * sqrt_total_var for ind in range(dims)]
+
     releases = []
     for _ in range(NUM_TRIALS):
         sample = np.random.choice(modified)
         one_hot_rep = np.zeros(len(cat_to_idx))
-        one_hot_rep[cat_to_idx[sample]] = 1
+        one_hot_rep[cat_to_idx[sample]] = 1  # set the hot component to 1
         for dim_ind in range(len(one_hot_rep)):
-            one_hot_rep[dim_ind] += np.random.normal(loc=0, scale = np.sqrt(per_dim_scale[dim_ind]))
+            one_hot_rep[dim_ind] += np.random.normal(loc=0, scale = np.sqrt(per_dim_scale[dim_ind])) # add noise to each dimension
         release = idx_to_cat[np.argmax(one_hot_rep)]
         if release == NULL_VAL:
             releases.append(None)
         else:
             releases.append(release)
     return per_dim_scale, releases
+
 
 def add_pac_noise_to_sample(
     input_path: Union[str, Path],
@@ -123,37 +147,41 @@ def add_pac_noise_to_sample(
 
     # Read values and dtype from JSON
     dtype_str = entry.get("dtype", "")
-    raw_values = entry.get("values", [])
-
+    raw_values: list = entry.get("values", [])
     sample_size = entry.get("samples", 0)
-    is_numeric = True
-    num_nulls = 0
-    if len(raw_values) < sample_size or None in raw_values or nan_check(raw_values):
-        # logging.warning(
-        #     "For %s %s, sample size (%d) is larger than the number of values (%d).", experiment, input_path.name, sample_size, len(raw_values))
-        is_numeric = False
-        num_nulls = sample_size - len(raw_values)
-    # Determine if numeric type
-    if is_numeric:
-        try:
-            series = pl.Series("v", raw_values)
-            try:
-                series = series.cast(eval(f"pl.{dtype_str}"))
-            except Exception:
-                series = series.cast(pl.Float64)
-            is_numeric = series.dtype.is_numeric()
+    null_nan_present = entry.get("null_nan_present", False)
 
+    # Begin by assuming the data is numeric, which we might disqualify later
+    is_numeric = True
+
+    values = []
+    if (null_nan_present or len(raw_values) < sample_size) or (None in raw_values) or any(
+        isinstance(x, (float, np.floating)) and np.isnan(x)
+        for x in raw_values
+    ):
+        #logging.info("Detected nulls or insufficient samples; treating data as categorical.")
+        #print(raw_values, null_nan_present, len(raw_values), sample_size)
+        values = raw_values
+        values.extend([NULL_VAL]*(sample_size - len(raw_values)))
+        #print(values)
+        is_numeric = False  # presence of nulls forces categorical treatment
+        assert values is not None
+    else:
+        try:
+            #logging.info("Attempting to cast values to Polars Series with dtype %s", dtype_str)
+            series = pl.Series("v", raw_values).cast(dtype=eval(f"pl.{dtype_str}"), strict=True)
             if series.dtype.is_decimal():
                 series = series.cast(pl.Float64)
-
             values = series.to_numpy()
+            is_numeric = series.dtype.is_numeric()
+            assert values is not None
         except Exception:
             logging.warning("Polars cast failed. Attempting numpy conversion.")
             values = np.array(raw_values)
             is_numeric = values.dtype.kind in 'biufc'
+            assert values is not None
         if is_numeric:
-            values = [k for k in values if not np.isnan(k)] # only one output col
-            assert(len(values) == len(raw_values)) # can't add noise to a NaN so this is an error case
+            assert all(not np.isnan(k) for k in values) # can't add noise to a NaN so this is an error case
 
     timer.end()
 
@@ -161,9 +189,7 @@ def add_pac_noise_to_sample(
     if is_numeric:
         scale, releases = add_noise_numeric(values, mi)
     else:
-        raw_values.extend([NULL_VAL]*num_nulls)
-        scale, releases = add_noise_categorical(raw_values, mi)
-
+        scale, releases = add_noise_categorical(values, mi)
     timer.end()
 
     timer.start("write_json")
