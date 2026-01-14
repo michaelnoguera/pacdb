@@ -5,24 +5,15 @@ from pathlib import Path
 from typing import Optional, Union
 
 import numpy as np
-import polars as pl
 import pandas as pd
+import polars as pl
 
 from timer import Timer
-
-# class NullCategory:
-#     """A unique class to represent null category values."""
-#     def __repr__(self):
-#         return "NULL"
-#     def __eq__(self, other):
-#         return isinstance(other, NullCategory)
-#     def __hash__(self):
-#         return object.__hash__(self)
 
 # Default max mutual information bound
 DEFAULT_MI = 1/2
 NUM_TRIALS = 1000
-NULL_VAL = pl.Null() #NullCategory() # A unique sentinel value for null categories
+NULL_VAL = pl.Null() # Use polars null as sentinel value for null categories
 
 
 class CustomEncoder(json.JSONEncoder):
@@ -74,23 +65,13 @@ def add_noise_categorical(values, mi):
     ]
 
     modified = np.where(mask_null, pd.NA, values)  # use np.nan to work with pd.factorize
-    #print("modified1:", modified)
     encoded, categories  = pd.factorize(modified, use_na_sentinel=True)
-    #categories, encoded = np.unique(modified, return_inverse=True, equal_nan=True)
 
     # Convert back from np.nan to NULL_VAL sentinel (because nan is unequal to itself but the sentinel is)
-    #categories = np.where((isinstance(categories, (float, np.floating)) and np.isnan(categories)), NULL_VAL, categories)
-    #modified = np.where(mask_null, NULL_VAL, values).tolist()
-
     if any(mask_null):
         modified = np.where(mask_null, pl.Null(), values)
         categories = np.append(categories, pl.Null())  # ensure NULL_VAL is the last category
-    #print("categories:", categories)
-    #print("encoded:", encoded)
 
-    cat_to_idx = {cat: i for i, cat in enumerate(categories)} # map category to index of the one hot vector in categories array
-    assert all(cat_to_idx[categories[i]] == i for i in range(len(categories)))
-    idx_to_cat = {i: cat for i, cat in enumerate(categories)}
     one_hot_encodings = np.eye(len(categories))[encoded] # everything is a [1, 0, 0,...] vector now, 2d numpy array
 
     dims = one_hot_encodings.shape[1]
@@ -102,16 +83,20 @@ def add_noise_categorical(values, mi):
 
     releases = []
     for _ in range(NUM_TRIALS):
-        sample = np.random.choice(modified)
-        one_hot_rep = np.zeros(len(cat_to_idx))
-        one_hot_rep[cat_to_idx[sample]] = 1  # set the hot component to 1
+        sample_idx = np.random.choice(encoded) # categories[idx] gives the randomly chosen category
+
+        # create one-hot representation
+        one_hot_rep = np.zeros(len(categories))
+        one_hot_rep[sample_idx] = 1  # set the hot component to 1
+
         for dim_ind in range(len(one_hot_rep)):
             one_hot_rep[dim_ind] += np.random.normal(loc=0, scale = np.sqrt(per_dim_scale[dim_ind])) # add noise to each dimension
-        release = idx_to_cat[np.argmax(one_hot_rep)]
-        if release == NULL_VAL:
-            releases.append(None)
-        else:
-            releases.append(release)
+        
+        # the dimension with the highest value is the category to be released
+        release_cat_idx = np.argmax(one_hot_rep)
+        release = categories[release_cat_idx]
+
+        releases.append(None if release == NULL_VAL else release)
     return per_dim_scale, releases
 
 
