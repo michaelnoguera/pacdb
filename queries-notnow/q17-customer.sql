@@ -4,6 +4,7 @@
 
 --begin SAMPLE_STEP--
 DROP TABLE IF EXISTS random_samples;
+DROP TABLE IF EXISTS lineitem_enhanced;
 
 CREATE TEMP TABLE random_samples AS
 WITH sample_numbers AS MATERIALIZED (
@@ -12,16 +13,28 @@ WITH sample_numbers AS MATERIALIZED (
     SELECT 
         sample_numbers.sample_id,
         customer.rowid AS row_id,
-        (RANDOM() > 0.5)::BOOLEAN AS random_binary
+        (RANDOM() > 0)::BOOLEAN AS random_binary
     FROM sample_numbers
     JOIN customer ON TRUE  -- Cross join to duplicate rows for each sample
 )
 SELECT
     sample_id,
-    row_id,
-    random_binary
+    row_id
 FROM random_values
+WHERE random_binary = TRUE
 ORDER BY sample_id, row_id;
+
+CREATE TEMP TABLE lineitem_enhanced AS
+SELECT l.l_orderkey, 
+    l.l_linenumber,
+    l.l_partkey,
+    l.l_quantity,
+    l.l_extendedprice,
+    c.rowid as c_rowid,
+FROM lineitem l
+JOIN orders o ON o.o_orderkey = l.l_orderkey
+JOIN customer c ON c.c_custkey = o.o_custkey
+ORDER BY l.l_orderkey, l.l_linenumber;
 --end SAMPLE_STEP--
 
 
@@ -30,12 +43,9 @@ DEALLOCATE PREPARE run_query;
 
 PREPARE run_query AS 
 WITH lineitem_sampled AS (
-    SELECT * FROM lineitem
-    JOIN orders ON l_orderkey = o_orderkey
-    JOIN customer c ON o_custkey = c.c_custkey
-    JOIN random_samples rs ON c.rowid = rs.row_id 
+    SELECT * FROM lineitem_enhanced le
+    JOIN random_samples rs ON le.c_rowid = rs.row_id 
         AND rs.sample_id = $sample 
-        AND rs.random_binary = TRUE
 )
 SELECT
     sum(l_extendedprice) / 7.0 AS avg_yearly
