@@ -13,7 +13,7 @@ WITH sample_numbers AS MATERIALIZED (
     SELECT 
         sample_numbers.sample_id,
         customer.rowid AS row_id,
-        (RANDOM() > 0)::BOOLEAN AS random_binary
+        (RANDOM() > 0.5)::BOOLEAN AS random_binary
     FROM sample_numbers
     JOIN customer ON TRUE  -- Cross join to duplicate rows for each sample
 )
