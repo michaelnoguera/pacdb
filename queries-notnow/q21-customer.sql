@@ -1,6 +1,6 @@
 --var:SAMPLES = 128
---var:INDEX_COLS = ['s_name']
---var:OUTPUT_COLS = ['numwait']
+--var:INDEX_COLS = []
+--var:OUTPUT_COLS = ['s_name', 'numwait']
 
 --begin SAMPLE_STEP--
 DROP TABLE IF EXISTS random_samples;
