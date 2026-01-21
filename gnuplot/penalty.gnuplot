@@ -25,7 +25,7 @@ set bmargin at screen 0.28
 set xlabel "Query" offset 0,0.75 font ",11"
 set ylabel "Slowdown" offset 1,0 font ",11"
 set ytics ("0x" 0, "50x" 50, "100x" 100, "150x" 150, "200x" 200)
-set yrange [0:240]
+set yrange [0:120]
 
 set tics font ",11"
 set tics nomirror

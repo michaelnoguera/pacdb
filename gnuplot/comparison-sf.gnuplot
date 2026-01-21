@@ -38,10 +38,10 @@ set ytics offset 0.4,0
 set key top right horizontal Left reverse enhanced autotitles columnhead nobox
 #set key invert samplen 3 spacing 1 width 0 height 0 
 
-#set key horizontal top right nobox
+set key horizontal top left nobox
 set key samplen 3 spacing 1 width 0 height 0
 set key font ",10"
-set key offset 0,0.15
+set key offset 0,0.75
 
 set border 3 front lt black linewidth 1.0
 
